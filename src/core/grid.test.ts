@@ -6,6 +6,10 @@ describe('grid utils', () => {
     expect(worldToGrid(64, 96)).toEqual({ col: 2, row: 3 });
   });
 
+  it('converts world coordinates with custom tile size', () => {
+    expect(worldToGrid(45, 45, 15)).toEqual({ col: 3, row: 3 });
+  });
+
   it('converts grid coordinates to world', () => {
     expect(gridToWorld(2, 3)).toEqual({ x: 64, y: 96 });
   });

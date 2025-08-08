@@ -5,3 +5,10 @@ export const ENEMIES_PER_WAVE = 5;
 export const ENEMY_SPEED = 60; // pixels per second
 export const ENEMY_HP = 1;
 export const ENEMY_REWARD = 5;
+
+export const TOWER_COST = 20;
+export const TOWER_RANGE = 100;
+export const TOWER_FIRE_RATE = 1; // shots per second
+
+export const PROJECTILE_SPEED = 300; // pixels per second
+export const PROJECTILE_DAMAGE = 1;
