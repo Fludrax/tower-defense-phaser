@@ -8,14 +8,12 @@ import {
   STARTING_LIVES,
   STARTING_MONEY,
   WAVE_INTERVAL,
-  TOWER_COST,
-  TOWER_RANGE,
-  TOWER_FIRE_RATE,
   PROJECTILE_SPEED,
-  PROJECTILE_DAMAGE,
+  TOWER_STATS,
 } from '../core/balance';
 import { worldToGrid } from '../core/grid';
 import { selectTarget, Targetable } from '../core/targeting';
+import { StatusManager } from '../core/status';
 
 const TILE_SIZE = 32;
 const GRID_WIDTH = 30;
@@ -27,9 +25,10 @@ class Enemy implements Targetable {
   private dead = false;
   private scene: Phaser.Scene;
   private path: Phaser.Curves.Path;
-  public speed: number;
+  private baseSpeed: number;
   public hp: number;
   private onDeath: () => void;
+  private status: StatusManager;
 
   constructor(
     scene: Phaser.Scene,
@@ -40,9 +39,10 @@ class Enemy implements Targetable {
   ) {
     this.scene = scene;
     this.path = path;
-    this.speed = speed;
+    this.baseSpeed = speed;
     this.hp = hp;
     this.onDeath = onDeath;
+    this.status = new StatusManager((d) => this.takeDamage(d));
     this.circle = scene.add.circle(0, 0, 10, 0xf87171);
     this.circle.setInteractive();
     this.circle.on('pointerdown', () => {
@@ -80,7 +80,9 @@ class Enemy implements Targetable {
 
   update(delta: number) {
     if (this.dead) return false;
-    this.progressValue += (this.speed * delta) / this.path.getLength();
+    this.status.update(delta);
+    const speed = this.baseSpeed * this.status.speedMultiplier;
+    this.progressValue += (speed * delta) / this.path.getLength();
     if (this.progressValue >= 1) {
       this.dead = true;
       this.circle.destroy();
@@ -88,7 +90,20 @@ class Enemy implements Targetable {
     }
     const pos = this.path.getPoint(this.progressValue);
     this.circle.setPosition(pos.x, pos.y);
+    let color = 0xf87171;
+    if (this.status.hasSlow && this.status.hasDot) color = 0x9333ea;
+    else if (this.status.hasSlow) color = 0x60a5fa;
+    else if (this.status.hasDot) color = 0xdc2626;
+    this.circle.setFillStyle(color);
     return false;
+  }
+
+  applySlow(pct: number, duration: number) {
+    this.status.applySlow(pct, duration);
+  }
+
+  applyDot(dps: number, duration: number) {
+    this.status.applyDot(dps, duration);
   }
 }
 
@@ -98,20 +113,20 @@ class Projectile {
   private scene: Phaser.Scene;
   private target: Enemy;
   public speed: number;
-  public damage: number;
+  private onHit: (enemy: Enemy) => void;
 
   constructor(
     scene: Phaser.Scene,
     target: Enemy,
     speed: number,
-    damage: number,
     x: number,
     y: number,
+    onHit: (enemy: Enemy) => void,
   ) {
     this.scene = scene;
     this.target = target;
     this.speed = speed;
-    this.damage = damage;
+    this.onHit = onHit;
     this.circle = scene.add.circle(x, y, 3, 0xfacc15);
   }
 
@@ -125,7 +140,7 @@ class Projectile {
     const dist = Math.sqrt(dx * dx + dy * dy);
     const move = (this.speed * delta) / 1000;
     if (dist <= move) {
-      this.target.takeDamage(this.damage);
+      this.onHit(this.target);
       this.circle.destroy();
       this.dead = true;
       return true;
@@ -136,21 +151,34 @@ class Projectile {
   }
 }
 
+type TowerType = keyof typeof TOWER_STATS;
+
 class Tower {
   private rect: Phaser.GameObjects.Rectangle;
   private lastShot = 0;
   private scene: Phaser.Scene;
   public x: number;
   public y: number;
+  public type: TowerType;
   public range: number;
   public fireRate: number;
+  public damage: number;
+  public aoeRadius?: number;
+  public slowPct?: number;
+  public slowDur?: number;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, range: number, fireRate: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, type: TowerType) {
     this.scene = scene;
     this.x = x;
     this.y = y;
-    this.range = range;
-    this.fireRate = fireRate;
+    this.type = type;
+    const cfg = TOWER_STATS[type];
+    this.range = cfg.range;
+    this.fireRate = cfg.fireRate;
+    this.damage = cfg.damage;
+    this.aoeRadius = cfg.aoeRadius;
+    this.slowPct = cfg.slowPct;
+    this.slowDur = cfg.slowDur;
     this.rect = scene.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x60a5fa);
   }
 
@@ -159,9 +187,23 @@ class Tower {
     if (this.lastShot < 1000 / this.fireRate) return;
     const target = selectTarget(enemies, this.x, this.y, this.range) as Enemy | undefined;
     if (target) {
-      projectiles.push(
-        new Projectile(this.scene, target, PROJECTILE_SPEED, PROJECTILE_DAMAGE, this.x, this.y),
-      );
+      const onHit = (enemy: Enemy) => {
+        if (this.type === 'cannon' && this.aoeRadius) {
+          for (const e of enemies) {
+            const dx = e.x - enemy.x;
+            const dy = e.y - enemy.y;
+            if (dx * dx + dy * dy <= this.aoeRadius * this.aoeRadius) {
+              e.takeDamage(this.damage);
+            }
+          }
+        } else {
+          enemy.takeDamage(this.damage);
+          if (this.type === 'frost' && this.slowPct && this.slowDur) {
+            enemy.applySlow(this.slowPct, this.slowDur);
+          }
+        }
+      };
+      projectiles.push(new Projectile(this.scene, target, PROJECTILE_SPEED, this.x, this.y, onHit));
       this.lastShot = 0;
     }
   }
@@ -178,6 +220,7 @@ export class GameScene extends Phaser.Scene {
   private occupied = new Set<string>();
   private previewTower!: Phaser.GameObjects.Rectangle;
   private previewRange!: Phaser.GameObjects.Arc;
+  private selected: TowerType = 'arrow';
   private paused = false;
 
   constructor() {
@@ -197,18 +240,29 @@ export class GameScene extends Phaser.Scene {
     events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
 
     this.previewTower = this.add.rectangle(0, 0, TILE_SIZE, TILE_SIZE, 0x60a5fa, 0.5);
-    this.previewRange = this.add.circle(0, 0, TOWER_RANGE);
+    this.previewRange = this.add.circle(0, 0, TOWER_STATS[this.selected].range);
     this.previewRange.setStrokeStyle(1, 0xffffff, 0.3);
     this.previewRange.setFillStyle(0xffffff, 0.05);
     this.previewTower.setVisible(false);
     this.previewRange.setVisible(false);
 
+    events.on('selectTower', (type: TowerType) => {
+      this.selected = type;
+      this.previewRange.setRadius(TOWER_STATS[type].range);
+    });
+
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
       const x = col * TILE_SIZE + TILE_SIZE / 2;
       const y = row * TILE_SIZE + TILE_SIZE / 2;
+      const key = `${col},${row}`;
+      const valid =
+        !this.isPath(col, row) &&
+        !this.occupied.has(key) &&
+        this.money >= TOWER_STATS[this.selected].cost;
       this.previewTower.setPosition(x, y);
       this.previewRange.setPosition(x, y);
+      this.previewTower.setFillStyle(valid ? 0x60a5fa : 0xf87171, 0.5);
       this.previewTower.setVisible(true);
       this.previewRange.setVisible(true);
     });
@@ -216,12 +270,13 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
       const key = `${col},${row}`;
-      if (this.isPath(col, row) || this.occupied.has(key) || this.money < TOWER_COST) return;
+      const cfg = TOWER_STATS[this.selected];
+      if (this.isPath(col, row) || this.occupied.has(key) || this.money < cfg.cost) return;
       const x = col * TILE_SIZE + TILE_SIZE / 2;
       const y = row * TILE_SIZE + TILE_SIZE / 2;
-      this.towers.push(new Tower(this, x, y, TOWER_RANGE, TOWER_FIRE_RATE));
+      this.towers.push(new Tower(this, x, y, this.selected));
       this.occupied.add(key);
-      this.money -= TOWER_COST;
+      this.money -= cfg.cost;
       events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
     });
 
