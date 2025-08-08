@@ -18,6 +18,11 @@ Tower Defense game built with Phaser 3 + TypeScript using Vite.
 - Press `P` to pause/resume
 - Press `1` or `2` to set game speed
 
+## Gameplay
+
+- Waves of 5 enemies spawn every 10 seconds and follow the highlighted path.
+- Losing a life occurs when an enemy reaches the path end; defeating one grants money.
+
 ## Deployment
 
 Pushing to `main` builds and deploys the site to GitHub Pages automatically.

@@ -7,10 +7,10 @@ import {
   ENEMY_SPEED,
   STARTING_LIVES,
   STARTING_MONEY,
-  WAVE_INTERVAL,
+  WAVE_INTERVAL_MS,
   TOWER_COST,
   TOWER_RANGE,
-  TOWER_FIRE_RATE,
+  TOWER_FIRE_RATE_MS,
   PROJECTILE_SPEED,
   PROJECTILE_DAMAGE,
 } from '../core/balance';
@@ -34,10 +34,6 @@ class Enemy {
     private onDeath: () => void,
   ) {
     this.circle = scene.add.circle(0, 0, ENEMY_RADIUS, 0xf87171);
-    this.circle.setInteractive();
-    this.circle.on('pointerdown', () => {
-      this.hit(this.hp);
-    });
   }
 
   get x() {
@@ -191,7 +187,7 @@ export class GameScene extends Phaser.Scene {
           x + TILE_SIZE / 2,
           y + TILE_SIZE / 2,
           TOWER_RANGE,
-          TOWER_FIRE_RATE,
+          TOWER_FIRE_RATE_MS,
           this.projectiles,
           this.enemies,
         );
@@ -219,7 +215,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.time.addEvent({
-      delay: WAVE_INTERVAL,
+      delay: WAVE_INTERVAL_MS,
       loop: true,
       callback: this.spawnWave,
       callbackScope: this,
