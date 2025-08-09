@@ -8,16 +8,15 @@ import {
   STARTING_LIVES,
   STARTING_MONEY,
   WAVE_INTERVAL,
-  TOWER_COST,
-  TOWER_RANGE,
-  TOWER_FIRE_RATE,
+  TOWERS,
+  type TowerStats,
   PROJECTILE_SPEED,
-  PROJECTILE_DAMAGE,
 } from '../core/balance';
 import { worldToGrid } from '../core/grid';
 import { selectTarget, Targetable } from '../core/targeting';
 import { ObjectPool } from '../core/pool';
 import { updatePath } from '../systems/path';
+import { addStatus, updateStatuses, Status } from '../core/status';
 
 const TILE_SIZE = 32;
 const GRID_WIDTH = 30;
@@ -29,11 +28,16 @@ export class Enemy implements Targetable {
   dead = false;
   path!: Phaser.Curves.Path;
   speed = ENEMY_SPEED;
+  baseSpeed = ENEMY_SPEED;
   hp = ENEMY_HP;
   onDeath!: () => void;
+  private statuses: Status[] = [];
 
   constructor(private scene: Phaser.Scene) {
-    this.circle = scene.add.circle(0, 0, 10, 0xf87171).setActive(false).setVisible(false);
+    this.circle = scene
+      .add.circle(0, 0, 10, 0xf87171)
+      .setActive(false)
+      .setVisible(false);
     this.circle.setInteractive();
     this.circle.on('pointerdown', () => {
       this.dead = true;
@@ -44,18 +48,24 @@ export class Enemy implements Targetable {
 
   spawn(path: Phaser.Curves.Path, speed: number, hp: number, onDeath: () => void) {
     this.path = path;
+    this.baseSpeed = speed;
     this.speed = speed;
     this.hp = hp;
     this.onDeath = onDeath;
     this.progress = 0;
     this.dead = false;
     this.circle.setActive(true).setVisible(true);
+    this.statuses = [];
+    this.circle.setFillStyle(0xf87171);
   }
 
   reset() {
     this.circle.setActive(false).setVisible(false);
     this.dead = false;
     this.progress = 0;
+    this.statuses = [];
+    this.speed = this.baseSpeed;
+    this.circle.setFillStyle(0xf87171);
   }
 
   get x() {
@@ -75,6 +85,26 @@ export class Enemy implements Targetable {
       this.onDeath();
     }
   }
+
+  addSlow(pct: number, dur: number) {
+    addStatus(this.statuses, { type: 'slow', value: pct, remaining: dur }, 1);
+  }
+
+  addDot(dps: number, dur: number) {
+    addStatus(this.statuses, { type: 'dot', value: dps, remaining: dur }, 3);
+  }
+
+  update(delta: number) {
+    const { slow, damage } = updateStatuses(this.statuses, delta);
+    this.speed = this.baseSpeed * (1 - slow);
+    if (damage > 0) this.takeDamage(damage);
+    // visual indicator
+    if (slow > 0) {
+      this.circle.setFillStyle(0x60a5fa);
+    } else {
+      this.circle.setFillStyle(0xf87171);
+    }
+  }
 }
 
 export class Projectile {
@@ -82,14 +112,17 @@ export class Projectile {
   dead = false;
   target!: Enemy;
   speed = PROJECTILE_SPEED;
-  damage = PROJECTILE_DAMAGE;
+  private stats!: TowerStats;
+  private enemies: Enemy[] = [];
 
-  constructor(private scene: Phaser.Scene) {
+  constructor(private scene: GameScene) {
     this.circle = scene.add.circle(0, 0, 3, 0xfacc15).setActive(false).setVisible(false);
   }
 
-  fire(target: Enemy, x: number, y: number) {
+  fire(target: Enemy, x: number, y: number, stats: TowerStats, enemies: Enemy[]) {
     this.target = target;
+    this.stats = stats;
+    this.enemies = enemies;
     this.dead = false;
     this.circle.setPosition(x, y).setActive(true).setVisible(true);
   }
@@ -109,7 +142,31 @@ export class Projectile {
     const dist = Math.sqrt(dx * dx + dy * dy);
     const move = (this.speed * delta) / 1000;
     if (dist <= move) {
-      this.target.takeDamage(this.damage);
+      const tx = this.target.x;
+      const ty = this.target.y;
+      if (this.stats.aoeRadius) {
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          const d = Phaser.Math.Distance.Between(tx, ty, e.x, e.y);
+          if (d <= this.stats.aoeRadius) {
+            e.takeDamage(this.stats.damage);
+            if (this.stats.slowPct)
+              e.addSlow(this.stats.slowPct, this.stats.slowDur ?? 0);
+            if (this.stats.dotDamage)
+              e.addDot(this.stats.dotDamage, this.stats.dotDur ?? 0);
+          }
+        }
+        const explosion = this.scene.add
+          .circle(tx, ty, this.stats.aoeRadius, 0xfacc15, 0.3)
+          .setStrokeStyle(1, 0xffffff, 0.5);
+        this.scene.time.addEvent({ delay: 100, callback: () => explosion.destroy() });
+      } else {
+        this.target.takeDamage(this.stats.damage);
+        if (this.stats.slowPct)
+          this.target.addSlow(this.stats.slowPct, this.stats.slowDur ?? 0);
+        if (this.stats.dotDamage)
+          this.target.addDot(this.stats.dotDamage, this.stats.dotDur ?? 0);
+      }
       this.dead = true;
       this.circle.setActive(false).setVisible(false);
       return true;
@@ -123,24 +180,18 @@ export class Projectile {
 class Tower {
   private rect: Phaser.GameObjects.Rectangle;
   private lastShot = 0;
-  constructor(
-    private scene: GameScene,
-    public x: number,
-    public y: number,
-    public range: number,
-    public fireRate: number,
-  ) {
+  constructor(private scene: GameScene, public x: number, public y: number, private stats: TowerStats) {
     this.rect = scene.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x60a5fa);
   }
 
   update(delta: number, enemies: Enemy[]) {
     this.lastShot += delta;
-    if (this.lastShot < 1000 / this.fireRate) return;
-    const target = selectTarget(enemies, this.x, this.y, this.range) as Enemy | undefined;
+    if (this.lastShot < 1000 / this.stats.fireRate) return;
+    const target = selectTarget(enemies, this.x, this.y, this.stats.range) as Enemy | undefined;
     if (target) {
       if (this.scene.game.loop.actualFps >= 50 || this.scene.projectiles.length < 100) {
         const p = this.scene.projectilePool.acquire();
-        p.fire(target, this.x, this.y);
+        p.fire(target, this.x, this.y, this.stats, enemies);
         this.scene.projectiles.push(p);
       }
       this.lastShot = 0;
@@ -166,6 +217,7 @@ export class GameScene extends Phaser.Scene {
   private profiler = false;
   private updateTotal = 0;
   private updateSamples = 0;
+  private selectedTower = 'arrow';
 
   constructor() {
     super('Game');
@@ -201,18 +253,23 @@ export class GameScene extends Phaser.Scene {
     events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
 
     this.previewTower = this.add.rectangle(0, 0, TILE_SIZE, TILE_SIZE, 0x60a5fa, 0.5);
-    this.previewRange = this.add.circle(0, 0, TOWER_RANGE);
+    this.previewRange = this.add.circle(0, 0, TOWERS[this.selectedTower].range);
     this.previewRange.setStrokeStyle(1, 0xffffff, 0.3);
     this.previewRange.setFillStyle(0xffffff, 0.05);
     this.previewTower.setVisible(false);
     this.previewRange.setVisible(false);
-
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
       const x = col * TILE_SIZE + TILE_SIZE / 2;
       const y = row * TILE_SIZE + TILE_SIZE / 2;
       this.previewTower.setPosition(x, y);
       this.previewRange.setPosition(x, y);
+      const key = `${col},${row}`;
+      const stats = TOWERS[this.selectedTower];
+      this.previewRange.setRadius(stats.range);
+      const valid =
+        !this.isPath(col, row) && !this.occupied.has(key) && this.money >= stats.cost;
+      this.previewTower.setFillStyle(valid ? 0x60a5fa : 0xf87171, 0.5);
       this.previewTower.setVisible(true);
       this.previewRange.setVisible(true);
     });
@@ -220,13 +277,19 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
       const key = `${col},${row}`;
-      if (this.isPath(col, row) || this.occupied.has(key) || this.money < TOWER_COST) return;
+      const stats = TOWERS[this.selectedTower];
+      if (this.isPath(col, row) || this.occupied.has(key) || this.money < stats.cost) return;
       const x = col * TILE_SIZE + TILE_SIZE / 2;
       const y = row * TILE_SIZE + TILE_SIZE / 2;
-      this.towers.push(new Tower(this, x, y, TOWER_RANGE, TOWER_FIRE_RATE));
+      this.towers.push(new Tower(this, x, y, stats));
       this.occupied.add(key);
-      this.money -= TOWER_COST;
+      this.money -= stats.cost;
       events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
+    });
+
+    events.on('tower-select', (type: string) => {
+      this.selectedTower = type;
+      this.previewRange.setRadius(TOWERS[type].range);
     });
 
     this.input.keyboard?.on('keydown-P', () => {
@@ -247,6 +310,7 @@ export class GameScene extends Phaser.Scene {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
+      enemy.update(delta);
       if (updatePath(enemy, delta)) {
         this.enemies.splice(i, 1);
         this.lives -= 1;
