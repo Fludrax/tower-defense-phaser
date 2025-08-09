@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { events } from '../core/events';
+import { TOWERS } from '../core/balance';
 
 export class HUDScene extends Phaser.Scene {
   private statsText!: Phaser.GameObjects.Text;
@@ -20,5 +21,18 @@ export class HUDScene extends Phaser.Scene {
       },
       this,
     );
+
+    const types = Object.keys(TOWERS);
+    types.forEach((type, idx) => {
+      const stats = TOWERS[type];
+      this.add
+        .text(10 + idx * 100, 40, `${type} ($${stats.cost})`, {
+          color: '#ffffff',
+          backgroundColor: '#334155',
+        })
+        .setPadding(4)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => events.emit('tower-select', type));
+    });
   }
 }
