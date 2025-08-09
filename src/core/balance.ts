@@ -4,7 +4,7 @@ export const STARTING_MONEY = 100;
 export const WAVE_INTERVAL = 10000; // ms
 export const ENEMIES_PER_WAVE = 5;
 export const ENEMY_REWARD = 5;
-export const WAVE_BREAK = 7000; // ms between waves
+export const WAVE_BREAK = 8000; // ms between waves
 
 // Responsive tile size (updated on resize)
 export let TILE_SIZE = 32;
@@ -14,10 +14,11 @@ export function computeTileSize(width: number, height: number) {
 }
 
 // Enemy balancing
-const BASE_SPEED = 20;
-const SPEED_PER_WAVE = 0.02;
+const BASE_SPEED = 16; // px/s
+const SPEED_PER_WAVE = 0.015; // +1.5% per wave
+const MAX_SPEED = 60;
 export function enemySpeedForWave(wave: number) {
-  return Math.min(80, BASE_SPEED * (1 + wave * SPEED_PER_WAVE));
+  return Math.min(MAX_SPEED, BASE_SPEED * (1 + wave * SPEED_PER_WAVE));
 }
 
 const HP_BASE = 35;
@@ -26,7 +27,7 @@ export function enemyHpForWave(wave: number) {
 }
 
 export function spawnDelay() {
-  return jitter(1000, 0.1);
+  return jitter(1100, 0.1);
 }
 
 export interface TowerStats {
@@ -65,9 +66,9 @@ export const TOWERS: Record<string, TowerConfig> = {
   frost: {
     cost: 30,
     levels: [
-      { range: 90, fireRate: 1, damage: 0, slowPct: 0.3, slowDur: 2000 },
-      { range: 100, fireRate: 1.2, damage: 0, slowPct: 0.4, slowDur: 2000 },
-      { range: 110, fireRate: 1.5, damage: 0, slowPct: 0.5, slowDur: 2000 },
+      { range: 90, fireRate: 1, damage: 0, slowPct: 0.3, slowDur: 2 },
+      { range: 100, fireRate: 1.2, damage: 0, slowPct: 0.4, slowDur: 2 },
+      { range: 110, fireRate: 1.5, damage: 0, slowPct: 0.5, slowDur: 2 },
     ],
   },
 };

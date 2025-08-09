@@ -3,7 +3,7 @@ export type StatusType = 'slow' | 'dot';
 export interface Status {
   type: StatusType;
   value: number;
-  remaining: number; // ms
+  remaining: number; // seconds
 }
 
 export function addStatus(statuses: Status[], status: Status, maxStacks: number) {
@@ -24,7 +24,7 @@ export function updateStatuses(statuses: Status[], delta: number) {
     if (s.type === 'slow') {
       slow += s.value;
     } else if (s.type === 'dot') {
-      damage += (s.value * delta) / 1000;
+      damage += s.value * delta;
     }
     if (s.remaining <= 0) statuses.splice(i, 1);
   }

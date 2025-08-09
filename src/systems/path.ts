@@ -5,7 +5,8 @@ const tmp = new Phaser.Math.Vector2();
 
 export function updatePath(enemy: Enemy, delta: number) {
   if (enemy.dead) return true;
-  enemy.progress += (enemy.speed * delta) / enemy.path.getLength();
+  const distance = enemy.speed * delta;
+  enemy.progress += distance / enemy.pathLength;
   if (enemy.progress >= 1) {
     enemy.dead = true;
     enemy.circle.setActive(false).setVisible(false);

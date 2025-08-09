@@ -1,13 +1,16 @@
 :root {
-  --hud-bg: rgba(255, 255, 255, 0.06);
-  --hud-text: #e7edf7;
+  --bg: #0b1220;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --text: #e7edf7;
   --accent: #6bc2ff;
-  --hud-border: rgba(255, 255, 255, 0.12);
+  --danger: #ff6b6b;
+  --success: #7ee787;
 }
 
 .high-contrast {
-  --hud-bg: rgba(0, 0, 0, 0.8);
-  --hud-text: #fff;
+  --panel: rgba(0, 0, 0, 0.8);
+  --text: #fff;
   --accent: #ff5c00;
 }
 
@@ -15,15 +18,8 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    Arial,
-    sans-serif;
-  color: var(--hud-text);
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  color: var(--text);
   font-size: clamp(12px, 2vw, 16px);
 }
 
@@ -34,15 +30,14 @@
   transform: translateX(-50%);
   display: flex;
   gap: 8px;
-  background: var(--hud-bg);
+  background: var(--panel);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--hud-border);
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 8px;
   pointer-events: auto;
   align-items: center;
 }
-
 .hud-top .stat {
   display: flex;
   gap: 4px;
@@ -52,10 +47,10 @@ button {
   pointer-events: auto;
   min-width: 40px;
   min-height: 40px;
-  background: var(--hud-bg);
-  border: 1px solid var(--hud-border);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
-  color: var(--hud-text);
+  color: var(--text);
   cursor: pointer;
 }
 button:hover {
@@ -72,9 +67,9 @@ button:focus-visible {
   position: fixed;
   top: 60px;
   right: 12px;
-  background: var(--hud-bg);
+  background: var(--panel);
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 12px;
   pointer-events: auto;
@@ -82,7 +77,6 @@ button:focus-visible {
 .settings.hidden {
   display: none;
 }
-
 .settings label {
   display: flex;
   align-items: center;
@@ -103,23 +97,23 @@ button:focus-visible {
   display: none;
 }
 .modal-content {
-  background: var(--hud-bg);
+  background: var(--panel);
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 20px;
   text-align: center;
-  color: var(--hud-text);
+  color: var(--text);
 }
 
 .tower-panel {
   position: absolute;
-  background: var(--hud-bg);
-  border: 1px solid var(--hud-border);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
   border-radius: 8px;
   padding: 8px;
   pointer-events: auto;
-  color: var(--hud-text);
+  color: var(--text);
   width: 140px;
   font-size: 12px;
 }
@@ -129,6 +123,26 @@ button:focus-visible {
 .tower-panel button {
   width: 100%;
   margin-top: 4px;
+}
+
+.speed-group {
+  display: flex;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.speed-group button {
+  border: none;
+  border-radius: 0;
+}
+.speed-group button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+#hud-countdown {
+  flex: 1;
+  text-align: center;
 }
 
 @media (max-width: 480px) {

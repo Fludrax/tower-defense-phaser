@@ -32,6 +32,7 @@ export class Enemy implements Targetable {
   progress = 0;
   dead = false;
   path!: Phaser.Curves.Path;
+  pathLength = 0;
   speed = 0;
   baseSpeed = 0;
   hp = 0;
@@ -55,6 +56,7 @@ export class Enemy implements Targetable {
 
   spawn(path: Phaser.Curves.Path, speed: number, hp: number, onDeath: () => void) {
     this.path = path;
+    this.pathLength = path.getLength();
     this.baseSpeed = speed;
     this.speed = speed;
     this.hp = hp;
@@ -167,7 +169,7 @@ export class Projectile {
     const dx = this.target.x - this.circle.x;
     const dy = this.target.y - this.circle.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const move = (this.speed * delta) / 1000;
+    const move = this.speed * delta;
     if (dist <= move) {
       const tx = this.target.x;
       const ty = this.target.y;
@@ -266,7 +268,7 @@ class Tower {
 
   update(delta: number, enemies: Enemy[]) {
     this.lastShot += delta;
-    if (this.lastShot < 1000 / this.stats.fireRate) return;
+    if (this.lastShot < 1 / this.stats.fireRate) return;
     const target = selectTarget(enemies, this.x, this.y, this.stats.range) as Enemy | undefined;
     if (target) {
       if (this.scene.game.loop.actualFps >= 50 || this.scene.projectiles.length < 100) {
@@ -483,7 +485,7 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     if (this.paused || this.isGameOver) return;
     const start = performance.now();
-    const dt = delta * this.speedMultiplier;
+    const dt = (delta / 1000) * this.speedMultiplier;
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
@@ -551,7 +553,7 @@ export class GameScene extends Phaser.Scene {
     tower.rangeCircle.setRadius(tower.stats.range);
     tower.draw();
     this.emitStats();
-    sound.playPlace();
+    sound.playConfirm();
     this.towerPanel.openFor(tower);
   }
 
@@ -568,7 +570,7 @@ export class GameScene extends Phaser.Scene {
     tower.rangeCircle.destroy();
     this.towerPanel.close();
     this.emitStats();
-    sound.playPlace();
+    sound.playCash();
   }
 
   private getTower(col: number, row: number) {

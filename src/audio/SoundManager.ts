@@ -31,10 +31,11 @@ export class SoundManager {
     this.play(880, 80, 'square');
   }
   playShootCannon() {
-    this.play(200, 120, 'sawtooth');
+    this.play(200, 80, 'sine');
+    this.play(80, 120, 'sawtooth');
   }
   playShootFrost() {
-    this.play(660, 120, 'triangle');
+    this.play(660, 100, 'triangle');
   }
   playHit() {
     this.play(220, 80, 'square');
@@ -43,10 +44,16 @@ export class SoundManager {
     this.play(120, 200, 'sawtooth');
   }
   playPlace() {
-    this.play(660, 80, 'square');
+    this.play(500, 50, 'square');
   }
   playError() {
     this.play(100, 150, 'sawtooth');
+  }
+  playConfirm() {
+    this.play(660, 80, 'triangle');
+  }
+  playCash() {
+    this.play(440, 120, 'square');
   }
   playUIClick() {
     this.play(500, 50, 'square');
