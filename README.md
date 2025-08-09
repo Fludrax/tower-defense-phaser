@@ -22,6 +22,10 @@ Use the toolbar to choose actions:
 
 Enemy speed now starts slow and ramps up gradually each wave.
 
+## Audio
+
+All sound effects are generated via WebAudio and can be muted or adjusted in the Settings panel.
+
 ## Deployment
 
 Pushing to `main` builds and deploys the site to GitHub Pages automatically.
