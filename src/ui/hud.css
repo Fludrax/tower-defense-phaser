@@ -125,12 +125,28 @@ button:focus-visible {
   width: 140px;
   font-size: 12px;
 }
+.tower-panel::after {
+  content: '';
+  position: absolute;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid var(--panel);
+  top: 100%;
+  left: calc(var(--arrow-x, 0px) - 8px);
+}
 .tower-panel.hidden {
   display: none;
 }
 .tower-panel button {
   width: 100%;
   margin-top: 4px;
+}
+.tower-panel .inc {
+  color: var(--success);
+  margin-left: 2px;
+}
+.tower-panel button.danger {
+  background: var(--danger);
 }
 
 .speed-group {

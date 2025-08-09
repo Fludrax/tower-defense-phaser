@@ -277,12 +277,9 @@ class Tower {
       .setVisible(false);
     const hit = new Phaser.Geom.Rectangle(-TILE_SIZE / 2, -TILE_SIZE / 2, TILE_SIZE, TILE_SIZE);
     this.body.setInteractive(hit, Phaser.Geom.Rectangle.Contains);
+    this.body.setData('tower', this);
     this.body.on('pointerover', () => this.rangeCircle.setVisible(true));
     this.body.on('pointerout', () => this.rangeCircle.setVisible(false));
-    this.body.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pointer.event.stopPropagation();
-      this.scene.showTowerPanel(this);
-    });
   }
 
   public draw() {
@@ -341,6 +338,7 @@ export class GameScene extends Phaser.Scene {
   private placement!: PlacementController;
   private enemies: Enemy[] = [];
   private towers: Tower[] = [];
+  private towerGroup!: Phaser.GameObjects.Group;
   public projectiles: Projectile[] = [];
   private previewTower!: Phaser.GameObjects.Rectangle;
   private previewRange!: Phaser.GameObjects.Arc;
@@ -399,6 +397,7 @@ export class GameScene extends Phaser.Scene {
     this.speedMultiplier = 1;
     this.enemies = [];
     this.towers = [];
+    this.towerGroup = this.add.group();
     this.projectiles = [];
     this.input.enabled = true;
     this.input.mouse?.disableContextMenu();
@@ -496,7 +495,9 @@ export class GameScene extends Phaser.Scene {
           }
           const x = this.map.grid.offsetX + col * TILE_SIZE + TILE_SIZE / 2;
           const y = this.map.grid.offsetY + row * TILE_SIZE + TILE_SIZE / 2;
-          this.towers.push(new Tower(this, x, y, type));
+          const tower = new Tower(this, x, y, type);
+          this.towers.push(tower);
+          this.towerGroup.add(tower.body);
           this.placement.place({ x: col, y: row });
           sound.playPlace();
           cancelMode();
@@ -517,11 +518,12 @@ export class GameScene extends Phaser.Scene {
             sound.playError();
           }
         } else {
-          if (this.towerPanel.isOpen() && targets.length === 0) {
+          const obj = targets.find((t) => this.towerGroup.contains(t));
+          if (obj) {
+            const tower = obj.getData('tower') as Tower;
+            this.showTowerPanel(tower);
+          } else if (this.towerPanel.isOpen()) {
             this.hidePanel();
-          } else {
-            const tower = this.getTower(col, row);
-            if (tower) this.showTowerPanel(tower);
           }
         }
       },
@@ -598,20 +600,20 @@ export class GameScene extends Phaser.Scene {
     this.activeTower = null;
   }
 
-  private upgradeTower(tower: Tower) {
+  private upgradeTower(tower: Tower): boolean {
     const cfg = TOWERS[tower.type];
-    if (tower.level >= cfg.levels.length) return;
+    if (tower.level >= cfg.levels.length) return false;
     const cost = upgradeCost(cfg.cost, tower.level);
     if (!this.spendMoney(cost)) {
       sound.playError();
-      return;
+      return false;
     }
     tower.level += 1;
     tower.stats = cfg.levels[tower.level - 1];
     tower.rangeCircle.setRadius(tower.stats.range);
     tower.draw();
     sound.playConfirm();
-    this.towerPanel.openFor(tower);
+    return true;
   }
 
   private sellTower(tower: Tower) {
@@ -623,7 +625,7 @@ export class GameScene extends Phaser.Scene {
     this.placement.remove({ x: col, y: row });
     const idx = this.towers.indexOf(tower);
     if (idx >= 0) this.towers.splice(idx, 1);
-    tower.body.destroy();
+    this.towerGroup.remove(tower.body, true, true);
     tower.rangeCircle.destroy();
     this.towerPanel.close();
     this.emitStats();
