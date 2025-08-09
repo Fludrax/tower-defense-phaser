@@ -1,4 +1,4 @@
-export const TILE_SIZE = 32;
+import { TILE_SIZE } from './balance';
 
 export function worldToGrid(x: number, y: number, tileSize = TILE_SIZE) {
   return {

@@ -1,0 +1,111 @@
+:root {
+  --hud-bg: rgba(255, 255, 255, 0.06);
+  --hud-text: #fff;
+  --accent: #22d3ee;
+}
+
+.high-contrast {
+  --hud-bg: rgba(0, 0, 0, 0.8);
+  --hud-text: #fff;
+  --accent: #ff5c00;
+}
+
+#hud-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: system-ui, sans-serif;
+  color: var(--hud-text);
+  font-size: clamp(12px, 2vw, 16px);
+}
+
+.hud-top {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  background: var(--hud-bg);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 12px;
+  pointer-events: auto;
+  align-items: center;
+}
+
+.hud-top .stat {
+  display: flex;
+  gap: 4px;
+}
+
+button {
+  pointer-events: auto;
+  min-width: 40px;
+  min-height: 40px;
+  background: var(--hud-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--hud-text);
+  cursor: pointer;
+}
+button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+button:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+button:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.settings {
+  position: fixed;
+  top: 60px;
+  right: 12px;
+  background: var(--hud-bg);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  pointer-events: auto;
+}
+.settings.hidden {
+  display: none;
+}
+
+.settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+.modal.hidden {
+  display: none;
+}
+.modal-content {
+  background: var(--hud-bg);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  color: var(--hud-text);
+}
+
+@media (max-width: 480px) {
+  .hud-top .label {
+    display: none;
+  }
+}

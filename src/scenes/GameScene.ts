@@ -2,15 +2,18 @@ import Phaser from 'phaser';
 import { events } from '../core/events';
 import {
   ENEMIES_PER_WAVE,
-  ENEMY_HP,
   ENEMY_REWARD,
-  ENEMY_SPEED,
   STARTING_LIVES,
   STARTING_MONEY,
   WAVE_INTERVAL,
   TOWERS,
   type TowerStats,
   PROJECTILE_SPEED,
+  computeTileSize,
+  TILE_SIZE,
+  enemySpeedForWave,
+  enemyHpForWave,
+  spawnDelay,
 } from '../core/balance';
 import { worldToGrid } from '../core/grid';
 import { selectTarget, Targetable } from '../core/targeting';
@@ -19,26 +22,22 @@ import { updatePath } from '../systems/path';
 import { addStatus, updateStatuses, Status } from '../core/status';
 import { upgradeCost, sellRefund } from '../core/economy';
 
-const TILE_SIZE = 32;
-const GRID_WIDTH = 30;
-const GRID_HEIGHT = 17;
+let GRID_WIDTH = 30;
+let GRID_HEIGHT = 17;
 
 export class Enemy implements Targetable {
   circle: Phaser.GameObjects.Arc;
   progress = 0;
   dead = false;
   path!: Phaser.Curves.Path;
-  speed = ENEMY_SPEED;
-  baseSpeed = ENEMY_SPEED;
-  hp = ENEMY_HP;
+  speed = 0;
+  baseSpeed = 0;
+  hp = 0;
   onDeath!: () => void;
   private statuses: Status[] = [];
 
   constructor(private scene: Phaser.Scene) {
-    this.circle = scene
-      .add.circle(0, 0, 10, 0xf87171)
-      .setActive(false)
-      .setVisible(false);
+    this.circle = scene.add.circle(0, 0, 10, 0xf87171).setActive(false).setVisible(false);
     this.circle.setInteractive();
     this.circle.on('pointerdown', () => {
       this.dead = true;
@@ -151,10 +150,8 @@ export class Projectile {
           const d = Phaser.Math.Distance.Between(tx, ty, e.x, e.y);
           if (d <= this.stats.aoeRadius) {
             e.takeDamage(this.stats.damage);
-            if (this.stats.slowPct)
-              e.addSlow(this.stats.slowPct, this.stats.slowDur ?? 0);
-            if (this.stats.dotDamage)
-              e.addDot(this.stats.dotDamage, this.stats.dotDur ?? 0);
+            if (this.stats.slowPct) e.addSlow(this.stats.slowPct, this.stats.slowDur ?? 0);
+            if (this.stats.dotDamage) e.addDot(this.stats.dotDamage, this.stats.dotDur ?? 0);
           }
         }
         const explosion = this.scene.add
@@ -163,10 +160,8 @@ export class Projectile {
         this.scene.time.addEvent({ delay: 100, callback: () => explosion.destroy() });
       } else {
         this.target.takeDamage(this.stats.damage);
-        if (this.stats.slowPct)
-          this.target.addSlow(this.stats.slowPct, this.stats.slowDur ?? 0);
-        if (this.stats.dotDamage)
-          this.target.addDot(this.stats.dotDamage, this.stats.dotDur ?? 0);
+        if (this.stats.slowPct) this.target.addSlow(this.stats.slowPct, this.stats.slowDur ?? 0);
+        if (this.stats.dotDamage) this.target.addDot(this.stats.dotDamage, this.stats.dotDur ?? 0);
       }
       this.dead = true;
       this.circle.setActive(false).setVisible(false);
@@ -183,7 +178,12 @@ class Tower {
   private lastShot = 0;
   public level = 1;
   public stats: TowerStats;
-  constructor(private scene: GameScene, public x: number, public y: number, public type: string) {
+  constructor(
+    private scene: GameScene,
+    public x: number,
+    public y: number,
+    public type: string,
+  ) {
     this.stats = TOWERS[type].levels[0];
     this.rect = scene.add.rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x60a5fa).setInteractive();
     this.rect.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -224,6 +224,10 @@ export class GameScene extends Phaser.Scene {
   private sellBtn!: Phaser.GameObjects.Text;
   private activeTower: Tower | null = null;
   private paused = false;
+  private speedMultiplier = 1;
+  private isGameOver = false;
+  private spawnEvent?: Phaser.Time.TimerEvent;
+  private waveTimer!: Phaser.Time.TimerEvent;
   private enemyPool!: ObjectPool<Enemy>;
   public projectilePool!: ObjectPool<Projectile>;
   private profilerText!: Phaser.GameObjects.Text;
@@ -236,7 +240,37 @@ export class GameScene extends Phaser.Scene {
     super('Game');
   }
 
+  private emitStats() {
+    events.emit('waveChanged', this.wave);
+    events.emit('livesChanged', this.lives);
+    events.emit('moneyChanged', this.money);
+  }
+
+  private handleGameOver() {
+    if (this.isGameOver) return;
+    this.isGameOver = true;
+    this.spawnEvent?.remove();
+    this.waveTimer.remove();
+    this.time.timeScale = 0;
+    this.input.enabled = false;
+    events.emit('gameOver', { wave: this.wave, money: this.money });
+  }
+
   create() {
+    this.wave = 0;
+    this.lives = STARTING_LIVES;
+    this.money = STARTING_MONEY;
+    this.isGameOver = false;
+    this.paused = false;
+    this.speedMultiplier = 1;
+    this.enemies = [];
+    this.towers = [];
+    this.projectiles = [];
+    this.occupied.clear();
+    this.input.enabled = true;
+    computeTileSize(this.scale.width, this.scale.height);
+    GRID_WIDTH = Math.floor(this.scale.width / TILE_SIZE);
+    GRID_HEIGHT = Math.floor(this.scale.height / TILE_SIZE);
     this.drawGrid();
     this.createPath();
     this.enemyPool = new ObjectPool(
@@ -256,14 +290,40 @@ export class GameScene extends Phaser.Scene {
       this.profilerText.setVisible(this.profiler);
     });
 
-    this.time.addEvent({
+    this.waveTimer = this.time.addEvent({
       delay: WAVE_INTERVAL,
       loop: true,
       callback: this.spawnWave,
       callbackScope: this,
     });
     this.spawnWave();
-    events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
+    this.emitStats();
+    events.emit('speedChanged', this.speedMultiplier);
+
+    events.on('setSpeed', (s: number) => {
+      this.speedMultiplier = s;
+      if (!this.paused) this.time.timeScale = s;
+      events.emit('speedChanged', s);
+    });
+    events.on('pause', () => {
+      this.paused = true;
+      this.time.timeScale = 0;
+    });
+    events.on('resume', () => {
+      this.paused = false;
+      this.time.timeScale = this.speedMultiplier;
+    });
+    events.on('restart', () => {
+      this.scene.restart();
+    });
+
+    this.scale.on('resize', (size: Phaser.Structs.Size) => {
+      computeTileSize(size.width, size.height);
+      GRID_WIDTH = Math.floor(size.width / TILE_SIZE);
+      GRID_HEIGHT = Math.floor(size.height / TILE_SIZE);
+    });
+
+    this.time.timeScale = this.speedMultiplier;
 
     this.previewTower = this.add.rectangle(0, 0, TILE_SIZE, TILE_SIZE, 0x60a5fa, 0.5);
     this.previewRange = this.add.circle(0, 0, TOWERS[this.selectedTower].levels[0].range);
@@ -292,6 +352,7 @@ export class GameScene extends Phaser.Scene {
       }
     });
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.isGameOver) return;
       const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
       const x = col * TILE_SIZE + TILE_SIZE / 2;
       const y = row * TILE_SIZE + TILE_SIZE / 2;
@@ -300,28 +361,31 @@ export class GameScene extends Phaser.Scene {
       const key = `${col},${row}`;
       const cfg = TOWERS[this.selectedTower];
       this.previewRange.setRadius(cfg.levels[0].range);
-      const valid =
-        !this.isPath(col, row) && !this.occupied.has(key) && this.money >= cfg.cost;
+      const valid = !this.isPath(col, row) && !this.occupied.has(key) && this.money >= cfg.cost;
       this.previewTower.setFillStyle(valid ? 0x60a5fa : 0xf87171, 0.5);
       this.previewTower.setVisible(true);
       this.previewRange.setVisible(true);
     });
 
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer, targets: any[]) => {
-      if (this.infoPanel.visible && targets.length === 0) {
-        this.hidePanel();
-      }
-      const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
-      const key = `${col},${row}`;
-      const cfg = TOWERS[this.selectedTower];
-      if (this.isPath(col, row) || this.occupied.has(key) || this.money < cfg.cost) return;
-      const x = col * TILE_SIZE + TILE_SIZE / 2;
-      const y = row * TILE_SIZE + TILE_SIZE / 2;
-      this.towers.push(new Tower(this, x, y, this.selectedTower));
-      this.occupied.add(key);
-      this.money -= cfg.cost;
-      events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
-    });
+    this.input.on(
+      'pointerdown',
+      (pointer: Phaser.Input.Pointer, targets: Phaser.GameObjects.GameObject[]) => {
+        if (this.isGameOver) return;
+        if (this.infoPanel.visible && targets.length === 0) {
+          this.hidePanel();
+        }
+        const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
+        const key = `${col},${row}`;
+        const cfg = TOWERS[this.selectedTower];
+        if (this.isPath(col, row) || this.occupied.has(key) || this.money < cfg.cost) return;
+        const x = col * TILE_SIZE + TILE_SIZE / 2;
+        const y = row * TILE_SIZE + TILE_SIZE / 2;
+        this.towers.push(new Tower(this, x, y, this.selectedTower));
+        this.occupied.add(key);
+        this.money -= cfg.cost;
+        this.emitStats();
+      },
+    );
 
     events.on('tower-select', (type: string) => {
       this.selectedTower = type;
@@ -341,17 +405,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
-    if (this.paused) return;
+    if (this.paused || this.isGameOver) return;
     const start = performance.now();
+    const dt = delta * this.speedMultiplier;
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
-      enemy.update(delta);
-      if (updatePath(enemy, delta)) {
+      enemy.update(dt);
+      if (updatePath(enemy, dt)) {
         this.enemies.splice(i, 1);
         this.lives -= 1;
-        events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
+        this.emitStats();
         this.enemyPool.release(enemy);
+        if (this.lives <= 0) this.handleGameOver();
         continue;
       }
       if (enemy.dead) {
@@ -361,12 +427,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     for (const tower of this.towers) {
-      tower.update(delta, this.enemies);
+      tower.update(dt, this.enemies);
     }
 
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
-      if (p.update(delta)) {
+      if (p.update(dt)) {
         this.projectiles.splice(i, 1);
         this.projectilePool.release(p);
       }
@@ -413,7 +479,7 @@ export class GameScene extends Phaser.Scene {
     this.money -= cost;
     tower.level += 1;
     tower.stats = cfg.levels[tower.level - 1];
-    events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
+    this.emitStats();
   }
 
   private sellTower(tower: Tower) {
@@ -426,7 +492,7 @@ export class GameScene extends Phaser.Scene {
     const idx = this.towers.indexOf(tower);
     if (idx >= 0) this.towers.splice(idx, 1);
     tower.rect.destroy();
-    events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
+    this.emitStats();
   }
 
   private drawGrid() {
@@ -443,8 +509,8 @@ export class GameScene extends Phaser.Scene {
   private createPath() {
     const points = [
       new Phaser.Math.Vector2(0, 5 * TILE_SIZE),
-      new Phaser.Math.Vector2(29 * TILE_SIZE, 5 * TILE_SIZE),
-      new Phaser.Math.Vector2(29 * TILE_SIZE, 16 * TILE_SIZE),
+      new Phaser.Math.Vector2((GRID_WIDTH - 1) * TILE_SIZE, 5 * TILE_SIZE),
+      new Phaser.Math.Vector2((GRID_WIDTH - 1) * TILE_SIZE, (GRID_HEIGHT - 1) * TILE_SIZE),
     ];
     this.path = new Phaser.Curves.Path(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) {
@@ -457,18 +523,30 @@ export class GameScene extends Phaser.Scene {
 
   private spawnWave() {
     this.wave += 1;
-    for (let i = 0; i < ENEMIES_PER_WAVE; i++) {
+    let spawned = 0;
+    const spawnEnemy = () => {
+      if (this.isGameOver) return;
       const enemy = this.enemyPool.acquire();
-      enemy.spawn(this.path, ENEMY_SPEED, ENEMY_HP, () => {
+      const speed = enemySpeedForWave(this.wave);
+      const hp = enemyHpForWave(this.wave);
+      enemy.spawn(this.path, speed, hp, () => {
         this.money += ENEMY_REWARD;
-        events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
+        this.emitStats();
       });
       this.enemies.push(enemy);
-    }
-    events.emit('stats', { wave: this.wave, lives: this.lives, money: this.money });
+      spawned += 1;
+      if (spawned < ENEMIES_PER_WAVE) {
+        this.spawnEvent = this.time.delayedCall(spawnDelay(), spawnEnemy);
+      }
+    };
+    spawnEnemy();
+    this.emitStats();
   }
 
   private isPath(col: number, row: number) {
-    return (row === 5 && col >= 0 && col <= 29) || (col === 29 && row >= 5 && row <= 16);
+    return (
+      (row === 5 && col >= 0 && col <= GRID_WIDTH - 1) ||
+      (col === GRID_WIDTH - 1 && row >= 5 && row <= GRID_HEIGHT - 1)
+    );
   }
 }
