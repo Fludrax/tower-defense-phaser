@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { theme } from '../core/theme';
+import { computeTileSize } from '../core/balance';
 
 export interface GridCell {
   x: number;
@@ -7,27 +8,52 @@ export interface GridCell {
 }
 
 export interface GridMap {
-  grid: { cols: number; rows: number; tileSize: number };
+  grid: { cols: number; rows: number; tileSize: number; offsetX: number; offsetY: number };
   path: GridCell[];
   buildableMask: boolean[][];
   start: GridCell;
   goal: GridCell;
 }
 
-function drawGrid(scene: Phaser.Scene, cols: number, rows: number, tileSize: number) {
+function drawGrid(
+  scene: Phaser.Scene,
+  cols: number,
+  rows: number,
+  tileSize: number,
+  offsetX: number,
+  offsetY: number,
+) {
   const g = scene.add.graphics();
   g.fillStyle(Phaser.Display.Color.HexStringToColor(theme.bg).color, 1);
-  g.fillRect(0, 0, cols * tileSize, rows * tileSize);
+  g.fillRect(offsetX, offsetY, cols * tileSize, rows * tileSize);
   g.lineStyle(1, 0xffffff, 0.06);
-  for (let c = 0; c <= cols; c++) g.lineBetween(c * tileSize, 0, c * tileSize, rows * tileSize);
-  for (let r = 0; r <= rows; r++) g.lineBetween(0, r * tileSize, cols * tileSize, r * tileSize);
+  for (let c = 0; c <= cols; c++)
+    g.lineBetween(
+      offsetX + c * tileSize,
+      offsetY,
+      offsetX + c * tileSize,
+      offsetY + rows * tileSize,
+    );
+  for (let r = 0; r <= rows; r++)
+    g.lineBetween(
+      offsetX,
+      offsetY + r * tileSize,
+      offsetX + cols * tileSize,
+      offsetY + r * tileSize,
+    );
 }
 
-function drawPath(scene: Phaser.Scene, path: GridCell[], tileSize: number) {
+function drawPath(
+  scene: Phaser.Scene,
+  path: GridCell[],
+  tileSize: number,
+  offsetX: number,
+  offsetY: number,
+) {
   const g = scene.add.graphics();
   g.fillStyle(Phaser.Display.Color.HexStringToColor(theme.path).color, 1);
   for (const cell of path) {
-    g.fillRect(cell.x * tileSize, cell.y * tileSize, tileSize, tileSize);
+    g.fillRect(offsetX + cell.x * tileSize, offsetY + cell.y * tileSize, tileSize, tileSize);
   }
 }
 
@@ -53,7 +79,11 @@ export function createGridMap(
   opts: { cols: number; rows: number; tileSize: number },
 ): GridMap {
   const { cols, rows, tileSize } = opts;
-  drawGrid(scene, cols, rows, tileSize);
+  const viewW = scene.scale?.width ?? cols * tileSize;
+  const viewH = scene.scale?.height ?? rows * tileSize;
+  const offsetX = Math.floor((viewW - cols * tileSize) / 2);
+  const offsetY = Math.floor((viewH - rows * tileSize) / 2);
+  drawGrid(scene, cols, rows, tileSize, offsetX, offsetY);
   const segments: [number, number, number, number][] = [
     [0, 5, cols - 6, 5],
     [cols - 6, 5, cols - 6, rows - 4],
@@ -66,7 +96,7 @@ export function createGridMap(
     [4, rows - 2, cols - 1, rows - 2],
   ];
   const path = expandSegments(segments);
-  drawPath(scene, path, tileSize);
+  drawPath(scene, path, tileSize, offsetX, offsetY);
   const buildableMask: boolean[][] = Array.from({ length: rows }, () => Array(cols).fill(true));
   // borders
   for (let c = 0; c < cols; c++) {
@@ -79,7 +109,7 @@ export function createGridMap(
   }
   for (const cell of path) buildableMask[cell.y][cell.x] = false;
   return {
-    grid: { cols, rows, tileSize },
+    grid: { cols, rows, tileSize, offsetX, offsetY },
     path,
     buildableMask,
     start: path[0],
@@ -87,14 +117,34 @@ export function createGridMap(
   };
 }
 
-export function gridToWorld(cell: GridCell, grid: { tileSize: number }) {
-  const { tileSize } = grid;
-  return { x: cell.x * tileSize + tileSize / 2, y: cell.y * tileSize + tileSize / 2 };
+export function computeGrid(viewW: number, viewH: number) {
+  const tileSize = computeTileSize(viewW, viewH);
+  const cols = Math.floor(viewW / tileSize);
+  const rows = Math.floor(viewH / tileSize);
+  return { tileSize, cols, rows };
 }
 
-export function worldToGrid(x: number, y: number, grid: { tileSize: number }): GridCell {
-  const { tileSize } = grid;
-  return { x: Math.floor(x / tileSize), y: Math.floor(y / tileSize) };
+export function gridToWorld(
+  cell: GridCell,
+  grid: { tileSize: number; offsetX: number; offsetY: number },
+) {
+  const { tileSize, offsetX, offsetY } = grid;
+  return {
+    x: offsetX + cell.x * tileSize + tileSize / 2,
+    y: offsetY + cell.y * tileSize + tileSize / 2,
+  };
+}
+
+export function worldToGrid(
+  x: number,
+  y: number,
+  grid: { tileSize: number; offsetX: number; offsetY: number },
+): GridCell {
+  const { tileSize, offsetX, offsetY } = grid;
+  return {
+    x: Math.floor((x - offsetX) / tileSize),
+    y: Math.floor((y - offsetY) / tileSize),
+  };
 }
 
 export function isInside(cell: GridCell, grid: { cols: number; rows: number }) {
