@@ -3,7 +3,8 @@ export const STARTING_LIVES = 20;
 export const STARTING_MONEY = 100;
 export const WAVE_INTERVAL = 10000; // ms
 export const ENEMIES_PER_WAVE = 5;
-export const ENEMY_REWARD = 5;
+export const ENEMY_REWARD = 2;
+export const SELL_REFUND = 0.7;
 export const WAVE_BREAK = 8000; // ms between waves
 
 // Responsive tile size (updated on resize)

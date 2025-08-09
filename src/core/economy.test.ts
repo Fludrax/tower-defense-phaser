@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { upgradeCost, totalCost, sellRefund, canAfford } from './economy';
+import { SELL_REFUND } from './balance';
 
 describe('economy', () => {
   it('calculates upgrade and total cost', () => {
@@ -9,7 +10,7 @@ describe('economy', () => {
   });
 
   it('computes sell refund', () => {
-    expect(sellRefund(100, 3)).toBe(Math.round(516 * 0.7));
+    expect(sellRefund(100, 3)).toBe(Math.round(516 * SELL_REFUND));
   });
 
   it('prevents purchase when funds insufficient', () => {
