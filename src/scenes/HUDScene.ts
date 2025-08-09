@@ -24,9 +24,9 @@ export class HUDScene extends Phaser.Scene {
 
     const types = Object.keys(TOWERS);
     types.forEach((type, idx) => {
-      const stats = TOWERS[type];
+      const cfg = TOWERS[type];
       this.add
-        .text(10 + idx * 100, 40, `${type} ($${stats.cost})`, {
+        .text(10 + idx * 100, 40, `${type} ($${cfg.cost})`, {
           color: '#ffffff',
           backgroundColor: '#334155',
         })
