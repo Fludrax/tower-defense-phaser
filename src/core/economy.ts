@@ -1,3 +1,5 @@
+import { SELL_REFUND } from './balance';
+
 export const UPGRADE_FACTOR = 1.6;
 
 export function upgradeCost(base: number, level: number) {
@@ -13,7 +15,7 @@ export function totalCost(base: number, level: number) {
 }
 
 export function sellRefund(base: number, level: number) {
-  return Math.round(totalCost(base, level) * 0.7);
+  return Math.round(totalCost(base, level) * SELL_REFUND);
 }
 
 export function canAfford(money: number, cost: number) {

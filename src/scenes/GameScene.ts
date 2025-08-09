@@ -368,6 +368,18 @@ export class GameScene extends Phaser.Scene {
     events.emit('moneyChanged', this.money);
   }
 
+  private spendMoney(cost: number) {
+    if (this.money < cost) return false;
+    this.money -= cost;
+    this.emitStats();
+    return true;
+  }
+
+  private gainKillReward() {
+    this.money += ENEMY_REWARD;
+    this.emitStats();
+  }
+
   private handleGameOver() {
     if (this.isGameOver) return;
     this.isGameOver = true;
@@ -478,7 +490,7 @@ export class GameScene extends Phaser.Scene {
         if (mode.startsWith('build:')) {
           const type = mode.split(':')[1] as keyof typeof TOWERS;
           const cfg = TOWERS[type];
-          if (!this.placement.canPlace({ x: col, y: row }) || this.money < cfg.cost) {
+          if (!this.placement.canPlace({ x: col, y: row }) || !this.spendMoney(cfg.cost)) {
             sound.playError();
             return;
           }
@@ -486,9 +498,7 @@ export class GameScene extends Phaser.Scene {
           const y = this.map.grid.offsetY + row * TILE_SIZE + TILE_SIZE / 2;
           this.towers.push(new Tower(this, x, y, type));
           this.placement.place({ x: col, y: row });
-          this.money -= cfg.cost;
           sound.playPlace();
-          this.emitStats();
           cancelMode();
           this.previewTower.setVisible(false);
           this.previewRange.setVisible(false);
@@ -592,16 +602,14 @@ export class GameScene extends Phaser.Scene {
     const cfg = TOWERS[tower.type];
     if (tower.level >= cfg.levels.length) return;
     const cost = upgradeCost(cfg.cost, tower.level);
-    if (this.money < cost) {
+    if (!this.spendMoney(cost)) {
       sound.playError();
       return;
     }
-    this.money -= cost;
     tower.level += 1;
     tower.stats = cfg.levels[tower.level - 1];
     tower.rangeCircle.setRadius(tower.stats.range);
     tower.draw();
-    this.emitStats();
     sound.playConfirm();
     this.towerPanel.openFor(tower);
   }
@@ -639,8 +647,7 @@ export class GameScene extends Phaser.Scene {
       const speed = enemySpeedForWave(this.wave);
       const hp = enemyHpForWave(this.wave);
       enemy.spawn(this.map.path, this.map.grid, speed, hp, () => {
-        this.money += ENEMY_REWARD;
-        this.emitStats();
+        this.gainKillReward();
       });
       this.enemies.push(enemy);
       spawned += 1;

@@ -34,4 +34,12 @@ describe('placement controller', () => {
     pc.remove(cell);
     expect(pc.canPlace(cell)).toBe(true);
   });
+
+  it('rejects placement on occupied cell', () => {
+    const map = createGridMap(sceneStub, { cols: 6, rows: 6, tileSize: 32 });
+    const pc = new PlacementController(map);
+    const cell = { x: 1, y: 1 };
+    expect(pc.place(cell)).toBe(true);
+    expect(pc.place(cell)).toBe(false);
+  });
 });
