@@ -25,14 +25,16 @@ export class TowerPanel {
   private tower?: TowerLike;
   constructor(
     private scene: Phaser.Scene,
-    private hooks: { upgrade(t: TowerLike): void; sell(t: TowerLike): void },
+    private hooks: { upgrade(_t: TowerLike): void; sell(_t: TowerLike): void },
   ) {
     const root = document.getElementById('hud-root')!;
     this.el = document.createElement('div');
     this.el.className = 'tower-panel hidden';
     this.el.innerHTML = `
       <div class="tp-name"></div>
-      <div class="tp-stats"></div>
+      <table class="tp-stats">
+        <tr><th></th><th>Now</th><th>Next</th></tr>
+      </table>
       <div class="tp-actions">
         <button id="tp-up">Upgrade</button>
         <button id="tp-sell">Sell</button>
@@ -56,17 +58,25 @@ export class TowerPanel {
       sound.playUIClick();
       this.close();
     });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.close();
+    });
+    root.addEventListener('pointerdown', (e) => {
+      if (!this.tower) return;
+      if (!this.el.contains(e.target as Node)) this.close();
+    });
   }
 
   openFor(tower: TowerLike) {
     this.tower = tower;
     const { before, after, upgrade, refund } = calcPreview(tower);
     this.el.querySelector('.tp-name')!.textContent = `${tower.type} L${tower.level}`;
-    const stats = this.el.querySelector('.tp-stats')!;
+    const stats = this.el.querySelector('.tp-stats') as HTMLTableElement;
     stats.innerHTML = `
-      <div>Damage ${before.damage} → ${after?.damage ?? before.damage}</div>
-      <div>FireRate ${before.fireRate} → ${after?.fireRate ?? before.fireRate}</div>
-      <div>Range ${before.range} → ${after?.range ?? before.range}</div>
+      <tr><th></th><th>Now</th><th>Next</th></tr>
+      <tr><td>Damage</td><td>${before.damage}</td><td>${after?.damage ?? '-'}</td></tr>
+      <tr><td>FireRate</td><td>${before.fireRate}</td><td>${after?.fireRate ?? '-'}</td></tr>
+      <tr><td>Range</td><td>${before.range}</td><td>${after?.range ?? '-'}</td></tr>
     `;
     const upBtn = this.el.querySelector('#tp-up') as HTMLButtonElement;
     if (upgrade === 0) {

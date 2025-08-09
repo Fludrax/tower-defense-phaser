@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, no-unused-vars */
 import Phaser from 'phaser';
 import { theme } from '../core/theme';
 import { computeTileSize } from '../core/balance';
@@ -8,6 +9,8 @@ import { computeMask } from './mapUtils';
 export interface MapData {
   grid: { width: number; height: number; tileSize: number };
   path: Phaser.Curves.Path;
+  pathLength: number;
+  pointAt: (d: number) => Phaser.Math.Vector2;
   buildableMask: Set<string>;
 }
 
@@ -18,7 +21,7 @@ export function createMap(scene: Phaser.Scene, opts: { kind: 'forest' | 'canyon'
   ground.fillStyle(Phaser.Display.Color.HexStringToColor(theme.bg).color, 1);
   ground.fillRect(0, 0, raw.width * tileSize, raw.height * tileSize);
   // grid lines
-  ground.lineStyle(1, 0xffffff, 0.05);
+  ground.lineStyle(1, 0xffffff, 0.03);
   for (let x = 0; x <= raw.width; x++) {
     ground.lineBetween(x * tileSize, 0, x * tileSize, raw.height * tileSize);
   }
@@ -26,29 +29,25 @@ export function createMap(scene: Phaser.Scene, opts: { kind: 'forest' | 'canyon'
     ground.lineBetween(0, y * tileSize, raw.width * tileSize, y * tileSize);
   }
 
-  const path = new Phaser.Curves.Path(
-    raw.path[0][0] * tileSize + tileSize / 2,
-    raw.path[0][1] * tileSize + tileSize / 2,
+  const pts = raw.path.map(
+    (p) => new Phaser.Math.Vector2(p[0] * tileSize + tileSize / 2, p[1] * tileSize + tileSize / 2),
   );
-  for (let i = 1; i < raw.path.length; i++) {
-    path.lineTo(raw.path[i][0] * tileSize + tileSize / 2, raw.path[i][1] * tileSize + tileSize / 2);
-  }
-  const pattern = scene.add.graphics();
-  pattern.lineStyle(
-    tileSize * 0.8,
-    Phaser.Display.Color.HexStringToColor(theme.pathHighlight).color,
-    0.3,
-  );
-  path.draw(pattern);
-
-  const overlay = scene.add.graphics() as Phaser.GameObjects.Graphics & {
-    lineCap?: CanvasLineCap;
-    lineJoin?: CanvasLineJoin;
+  const spline = new Phaser.Curves.Spline(pts);
+  const path = new Phaser.Curves.Path();
+  path.add(spline);
+  const pathLength = path.getLength();
+  const pointAt = (d: number) => {
+    const t = Phaser.Math.Clamp(d / pathLength, 0, 1);
+    const v = new Phaser.Math.Vector2();
+    path.getPoint(t, v);
+    return v;
   };
+  const overlay = scene.add.graphics();
   overlay.lineStyle(tileSize * 0.8, Phaser.Display.Color.HexStringToColor(theme.path).color, 1);
-  overlay.lineCap = 'round';
-  overlay.lineJoin = 'round';
   path.draw(overlay);
+  const glow = scene.add.graphics();
+  glow.lineStyle(tileSize * 0.8, Phaser.Display.Color.HexStringToColor(theme.path).color, 0.3);
+  path.draw(glow);
 
   // compute buildable mask
   const mask = computeMask(raw.path);
@@ -56,6 +55,9 @@ export function createMap(scene: Phaser.Scene, opts: { kind: 'forest' | 'canyon'
   return {
     grid: { width: raw.width, height: raw.height, tileSize },
     path,
+    pathLength,
+    pointAt,
     buildableMask: mask,
   };
 }
+/* eslint-enable @typescript-eslint/no-unused-vars, no-unused-vars */

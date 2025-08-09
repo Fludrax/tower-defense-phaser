@@ -8,7 +8,6 @@ export class HUDController {
   private livesEl: HTMLElement;
   private moneyEl: HTMLElement;
   private countdownEl: HTMLElement;
-  private speedBtn: HTMLButtonElement;
   private pauseBtn: HTMLButtonElement;
   private settingsPanel: HTMLElement;
   private modal: HTMLElement;
@@ -23,9 +22,13 @@ export class HUDController {
       <div class="stat"><span class="label">Wave</span> <span id="hud-wave">0</span></div>
       <div class="stat"><span class="label">Lives</span> <span id="hud-lives">0</span></div>
       <div class="stat"><span class="label">Money</span> <span id="hud-money">0</span></div>
-      <div class="stat" id="hud-countdown"></div>
+      <div class="stat countdown" id="hud-countdown"></div>
       <label class="stat">Map <select id="map-select"><option value="forest">Forest</option><option value="canyon">Canyon</option></select></label>
-      <button id="hud-speed">x1</button>
+      <div class="speed-group" role="group">
+        <button data-speed="1">x1</button>
+        <button data-speed="1.5">x1.5</button>
+        <button data-speed="2">x2</button>
+      </div>
       <button id="hud-pause">Pause</button>
       <button id="hud-settings">Settings</button>
     `;
@@ -35,15 +38,20 @@ export class HUDController {
     this.livesEl = top.querySelector('#hud-lives')!;
     this.moneyEl = top.querySelector('#hud-money')!;
     this.countdownEl = top.querySelector('#hud-countdown')!;
-    this.speedBtn = top.querySelector('#hud-speed') as HTMLButtonElement;
     this.pauseBtn = top.querySelector('#hud-pause') as HTMLButtonElement;
     const settingsBtn = top.querySelector('#hud-settings') as HTMLButtonElement;
     const mapSelect = top.querySelector('#map-select') as HTMLSelectElement;
+    const speedButtons = Array.from(
+      top.querySelectorAll('.speed-group button'),
+    ) as HTMLButtonElement[];
 
-    this.speedBtn.addEventListener('click', () => {
-      sound.playUIClick();
-      this.cycleSpeed();
-    });
+    speedButtons.forEach((btn) =>
+      btn.addEventListener('click', () => {
+        sound.playUIClick();
+        const s = Number(btn.getAttribute('data-speed'));
+        events.emit('setSpeed', s);
+      }),
+    );
     this.pauseBtn.addEventListener('click', () => {
       sound.playUIClick();
       this.togglePause();
@@ -123,7 +131,9 @@ export class HUDController {
     events.on('moneyChanged', (m: number) => (this.moneyEl.textContent = m.toString()));
     events.on('speedChanged', (s: number) => {
       this.speed = s;
-      this.speedBtn.textContent = `x${s}`;
+      speedButtons.forEach((b) =>
+        b.toggleAttribute('aria-pressed', Number(b.getAttribute('data-speed')) === s),
+      );
     });
     events.on('waveCountdown', (n: number) => {
       this.countdownEl.textContent = n > 0 ? `Next wave in ${n}` : '';
@@ -133,11 +143,6 @@ export class HUDController {
       info.textContent = `Wave ${data.wave} - Money ${data.money}`;
       this.showModal();
     });
-  }
-
-  private cycleSpeed() {
-    const next = this.speed === 1 ? 1.5 : this.speed === 1.5 ? 2 : 1;
-    events.emit('setSpeed', next);
   }
 
   private togglePause() {

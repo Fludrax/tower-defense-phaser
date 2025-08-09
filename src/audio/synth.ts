@@ -12,6 +12,9 @@ export function playTone(
   gain.gain.value = volume;
   osc.connect(gain);
   gain.connect(ctx.destination);
-  osc.start();
-  osc.stop(ctx.currentTime + dur / 1000);
+  const now = ctx.currentTime;
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + dur / 1000);
+  osc.start(now);
+  osc.stop(now + dur / 1000);
 }
