@@ -1,7 +1,8 @@
 :root {
   --hud-bg: rgba(255, 255, 255, 0.06);
-  --hud-text: #fff;
-  --accent: #22d3ee;
+  --hud-text: #e7edf7;
+  --accent: #6bc2ff;
+  --hud-border: rgba(255, 255, 255, 0.12);
 }
 
 .high-contrast {
@@ -14,7 +15,14 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  font-family: system-ui, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Arial,
+    sans-serif;
   color: var(--hud-text);
   font-size: clamp(12px, 2vw, 16px);
 }
@@ -27,10 +35,10 @@
   display: flex;
   gap: 8px;
   background: var(--hud-bg);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--hud-border);
   border-radius: 12px;
-  padding: 8px 12px;
+  padding: 8px;
   pointer-events: auto;
   align-items: center;
 }
@@ -45,8 +53,8 @@ button {
   min-width: 40px;
   min-height: 40px;
   background: var(--hud-bg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border: 1px solid var(--hud-border);
+  border-radius: 10px;
   color: var(--hud-text);
   cursor: pointer;
 }
@@ -102,6 +110,25 @@ button:focus-visible {
   padding: 20px;
   text-align: center;
   color: var(--hud-text);
+}
+
+.tower-panel {
+  position: absolute;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: 8px;
+  padding: 8px;
+  pointer-events: auto;
+  color: var(--hud-text);
+  width: 140px;
+  font-size: 12px;
+}
+.tower-panel.hidden {
+  display: none;
+}
+.tower-panel button {
+  width: 100%;
+  margin-top: 4px;
 }
 
 @media (max-width: 480px) {

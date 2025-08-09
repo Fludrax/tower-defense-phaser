@@ -92,7 +92,7 @@ export class HUDController {
     });
 
     const volume = this.settingsPanel.querySelector('#sfx-volume') as HTMLInputElement;
-    volume.addEventListener('input', () => sound.setVolume(Number(volume.value) / 100));
+    volume.addEventListener('input', () => sound.setVolume('sfx', Number(volume.value) / 100));
     const mute = this.settingsPanel.querySelector('#toggle-mute') as HTMLInputElement;
     mute.addEventListener('change', () => sound.setMute(mute.checked));
     const contrast = this.settingsPanel.querySelector('#toggle-contrast') as HTMLInputElement;

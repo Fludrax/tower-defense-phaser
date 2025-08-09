@@ -15,4 +15,14 @@ describe('status system', () => {
     result = updateStatuses(statuses, 1000);
     expect(result.slow).toBeCloseTo(0);
   });
+
+  it('frost slow expires', () => {
+    const statuses: Status[] = [];
+    addStatus(statuses, { type: 'slow', value: 0.5, remaining: 1000 }, 1);
+    let result = updateStatuses(statuses, 500);
+    expect(result.slow).toBeCloseTo(0.5);
+    result = updateStatuses(statuses, 600);
+    result = updateStatuses(statuses, 0);
+    expect(result.slow).toBeCloseTo(0);
+  });
 });

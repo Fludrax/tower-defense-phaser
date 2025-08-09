@@ -1,8 +1,14 @@
+import { playTone } from './synth';
+
 export class SoundManager {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  private ctx: AudioContext | null =
+    typeof window !== 'undefined'
+      ? new (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      : null;
   private muted = false;
-  private vol = 1;
+  private master = 1;
+  private sfx = 1;
 
   setMute(m: boolean) {
     this.muted = m;
@@ -10,46 +16,42 @@ export class SoundManager {
   isMuted() {
     return this.muted;
   }
-  setVolume(v: number) {
-    this.vol = v;
+  setVolume(kind: 'master' | 'sfx', v: number) {
+    if (kind === 'master') this.master = v;
+    else this.sfx = v;
   }
   getVolume() {
-    return this.vol;
+    return { master: this.master, sfx: this.sfx };
   }
-
-  private tone(freq: number, dur = 100) {
-    if (this.muted) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.frequency.value = freq;
-    gain.gain.value = this.vol;
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + dur / 1000);
+  private play(freq: number, dur: number, type: OscillatorType = 'sine') {
+    if (this.muted || !this.ctx) return;
+    playTone(this.ctx, freq, dur, type, this.master * this.sfx);
   }
-
-  playShoot() {
-    this.tone(880, 80);
+  playShootArrow() {
+    this.play(880, 80, 'square');
+  }
+  playShootCannon() {
+    this.play(200, 120, 'sawtooth');
+  }
+  playShootFrost() {
+    this.play(660, 120, 'triangle');
   }
   playHit() {
-    this.tone(220, 80);
+    this.play(220, 80, 'square');
   }
   playExplosion() {
-    this.tone(120, 200);
+    this.play(120, 200, 'sawtooth');
   }
   playPlace() {
-    this.tone(660, 80);
+    this.play(660, 80, 'square');
   }
   playError() {
-    this.tone(100, 150);
+    this.play(100, 150, 'sawtooth');
   }
   playUIClick() {
-    this.tone(500, 50);
+    this.play(500, 50, 'square');
   }
-  musicStart() {
-    // TODO background music
-  }
+  musicStart() {}
   musicStop() {}
 }
 
