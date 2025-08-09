@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcPreview, TowerLike } from './TowerPanel';
+import { calcPreview, type TowerLike } from './towerPanelPreview';
 import { TOWERS } from '../core/balance';
 import { upgradeCost, sellRefund } from '../core/economy';
 
