@@ -12,7 +12,7 @@ const config: Phaser.Types.Core.GameConfig = {
   width: window.innerWidth,
   height: window.innerHeight,
   pixelArt: true,
-  backgroundColor: '#0b1020',
+  backgroundColor: '#0b1220',
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,

@@ -14,10 +14,16 @@ import {
   spawnDelay,
   WAVE_BREAK,
 } from '../core/balance';
-import { worldToGrid } from '../core/grid';
 import { selectTarget, Targetable } from '../core/targeting';
 import { ObjectPool } from '../core/pool';
-import { GridCell, GridMap, createGridMap, gridToWorld } from '../systems/map';
+import {
+  GridCell,
+  GridMap,
+  createGridMap,
+  gridToWorld,
+  worldToGrid,
+  computeGrid,
+} from '../systems/map';
 import { PlacementController } from '../systems/actions';
 import { addStatus, updateStatuses, Status } from '../core/status';
 import { upgradeCost, sellRefund } from '../core/economy';
@@ -56,9 +62,15 @@ export class Enemy implements Targetable {
       .setVisible(false);
   }
 
-  spawn(path: GridCell[], tileSize: number, speed: number, hp: number, onDeath: () => void) {
+  spawn(
+    path: GridCell[],
+    grid: { tileSize: number; offsetX: number; offsetY: number },
+    speed: number,
+    hp: number,
+    onDeath: () => void,
+  ) {
     this.path = path;
-    this.positions = path.map((c) => gridToWorld(c, { tileSize }));
+    this.positions = path.map((c) => gridToWorld(c, grid));
     this.segment = 0;
     this.segProgress = 0;
     this.baseSpeed = speed;
@@ -378,7 +390,8 @@ export class GameScene extends Phaser.Scene {
     this.projectiles = [];
     this.input.enabled = true;
     this.input.mouse?.disableContextMenu();
-    this.map = createGridMap(this, { cols: 20, rows: 12, tileSize: TILE_SIZE });
+    const gridCfg = computeGrid(this.scale.width, this.scale.height);
+    this.map = createGridMap(this, gridCfg);
     this.placement = new PlacementController(this.map);
     this.enemyPool = new ObjectPool(
       () => new Enemy(this),
@@ -433,9 +446,9 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (this.isGameOver) return;
       const mode = getMode();
-      const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
-      const x = col * TILE_SIZE + TILE_SIZE / 2;
-      const y = row * TILE_SIZE + TILE_SIZE / 2;
+      const { x: col, y: row } = worldToGrid(pointer.x, pointer.y, this.map.grid);
+      const x = this.map.grid.offsetX + col * TILE_SIZE + TILE_SIZE / 2;
+      const y = this.map.grid.offsetY + row * TILE_SIZE + TILE_SIZE / 2;
       if (mode.startsWith('build:')) {
         const type = mode.split(':')[1] as keyof typeof TOWERS;
         const cfg = TOWERS[type];
@@ -461,7 +474,7 @@ export class GameScene extends Phaser.Scene {
           return;
         }
         const mode = getMode();
-        const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
+        const { x: col, y: row } = worldToGrid(pointer.x, pointer.y, this.map.grid);
         if (mode.startsWith('build:')) {
           const type = mode.split(':')[1] as keyof typeof TOWERS;
           const cfg = TOWERS[type];
@@ -469,8 +482,8 @@ export class GameScene extends Phaser.Scene {
             sound.playError();
             return;
           }
-          const x = col * TILE_SIZE + TILE_SIZE / 2;
-          const y = row * TILE_SIZE + TILE_SIZE / 2;
+          const x = this.map.grid.offsetX + col * TILE_SIZE + TILE_SIZE / 2;
+          const y = this.map.grid.offsetY + row * TILE_SIZE + TILE_SIZE / 2;
           this.towers.push(new Tower(this, x, y, type));
           this.placement.place({ x: col, y: row });
           this.money -= cfg.cost;
@@ -515,6 +528,7 @@ export class GameScene extends Phaser.Scene {
       this.time.timeScale = 2;
     });
     this.input.keyboard?.on('keydown-ESC', () => cancelMode());
+    this.scale.on('resize', () => this.scene.restart());
   }
 
   update(_time: number, delta: number) {
@@ -596,8 +610,8 @@ export class GameScene extends Phaser.Scene {
     const cfg = TOWERS[tower.type];
     const refund = sellRefund(cfg.cost, tower.level);
     this.money += refund;
-    const col = Math.floor(tower.x / TILE_SIZE);
-    const row = Math.floor(tower.y / TILE_SIZE);
+    const col = Math.floor((tower.x - this.map.grid.offsetX) / TILE_SIZE);
+    const row = Math.floor((tower.y - this.map.grid.offsetY) / TILE_SIZE);
     this.placement.remove({ x: col, y: row });
     const idx = this.towers.indexOf(tower);
     if (idx >= 0) this.towers.splice(idx, 1);
@@ -610,7 +624,9 @@ export class GameScene extends Phaser.Scene {
 
   private getTower(col: number, row: number) {
     return this.towers.find(
-      (t) => Math.floor(t.x / TILE_SIZE) === col && Math.floor(t.y / TILE_SIZE) === row,
+      (t) =>
+        Math.floor((t.x - this.map.grid.offsetX) / TILE_SIZE) === col &&
+        Math.floor((t.y - this.map.grid.offsetY) / TILE_SIZE) === row,
     );
   }
 
@@ -622,7 +638,7 @@ export class GameScene extends Phaser.Scene {
       const enemy = this.enemyPool.acquire();
       const speed = enemySpeedForWave(this.wave);
       const hp = enemyHpForWave(this.wave);
-      enemy.spawn(this.map.path, this.map.grid.tileSize, speed, hp, () => {
+      enemy.spawn(this.map.path, this.map.grid, speed, hp, () => {
         this.money += ENEMY_REWARD;
         this.emitStats();
       });
