@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calcPreview, TowerLike } from './TowerPanel';
 import { TOWERS } from '../core/balance';
+import { upgradeCost, sellRefund } from '../core/economy';
 
 describe('tower panel preview', () => {
   it('computes before/after and refund', () => {
@@ -14,7 +15,7 @@ describe('tower panel preview', () => {
     const res = calcPreview(tower);
     expect(res.before.damage).toBe(1);
     expect(res.after?.damage).toBe(2);
-    expect(res.upgrade).toBeGreaterThan(0);
-    expect(res.refund).toBeGreaterThan(0);
+    expect(res.upgrade).toBe(upgradeCost(TOWERS.arrow.cost, 1));
+    expect(res.refund).toBe(sellRefund(TOWERS.arrow.cost, 1));
   });
 });

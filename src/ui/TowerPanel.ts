@@ -89,10 +89,11 @@ export class TowerPanel {
     const sellBtn = this.el.querySelector('#tp-sell') as HTMLButtonElement;
     sellBtn.textContent = `Sell ($${refund})`;
     const cam = this.scene.cameras.main;
-    const screenX = tower.x - cam.worldView.x;
-    const screenY = tower.y - cam.worldView.y;
-    this.el.style.left = `${Math.min(screenX + 10, cam.width - 150)}px`;
-    this.el.style.top = `${Math.min(screenY - 10, cam.height - 100)}px`;
+    const dpr = window.devicePixelRatio || 1;
+    const screenX = (tower.x - cam.worldView.x) * dpr;
+    const screenY = (tower.y - cam.worldView.y) * dpr;
+    this.el.style.left = `${Math.min(screenX + 10, cam.width * dpr - 150)}px`;
+    this.el.style.top = `${Math.min(screenY - 10, cam.height * dpr - 100)}px`;
     this.el.classList.remove('hidden');
     (this.el.querySelector('#tp-up') as HTMLButtonElement).focus();
   }

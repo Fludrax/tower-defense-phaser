@@ -1,0 +1,42 @@
+#tool-sidebar {
+  position: fixed;
+  top: 90px;
+  right: 16px;
+  width: 280px;
+  backdrop-filter: blur(8px);
+  border-radius: 14px;
+  box-shadow: 0 4px 12px #0006;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#tool-sidebar .section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#tool-sidebar button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #ffffff20;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+#tool-sidebar button[aria-pressed="true"] {
+  background: #ffffff20;
+}
+
+#tool-sidebar svg {
+  width: 24px;
+  height: 24px;
+}

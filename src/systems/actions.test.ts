@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+import { createGridMap } from './map';
+import { PlacementController } from './actions';
 
 vi.mock('phaser', () => ({
   default: { Display: { Color: { HexStringToColor: () => ({ color: 0 }) } } },
 }));
-
-import { createGridMap, isBuildable, GridCell } from './map';
 
 const sceneStub = {
   add: {
@@ -25,12 +25,13 @@ const sceneStub = {
   },
 } as unknown as Phaser.Scene;
 
-describe('grid map buildable mask', () => {
-  it('marks path tiles as unbuildable', () => {
-    const map = createGridMap(sceneStub, { cols: 20, rows: 12, tileSize: 32 });
-    const start = map.start;
-    const inside: GridCell = { x: 6, y: 6 };
-    expect(isBuildable(start, map)).toBe(false);
-    expect(isBuildable(inside, map)).toBe(true);
+describe('placement controller', () => {
+  it('releases cell on remove', () => {
+    const map = createGridMap(sceneStub, { cols: 6, rows: 6, tileSize: 32 });
+    const pc = new PlacementController(map);
+    const cell = { x: 1, y: 1 };
+    expect(pc.place(cell)).toBe(true);
+    pc.remove(cell);
+    expect(pc.canPlace(cell)).toBe(true);
   });
 });

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { HUDController } from './ui/HUDController';
+import { SidebarController } from './ui/SidebarController';
 
 const zoom = Phaser.Math.Clamp(window.devicePixelRatio || 1, 1, 2);
 
@@ -24,3 +25,4 @@ export const game = new Phaser.Game(config);
 
 // Initialize HUD overlay
 new HUDController();
+new SidebarController();
