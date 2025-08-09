@@ -17,10 +17,10 @@ import {
 import { worldToGrid } from '../core/grid';
 import { selectTarget, Targetable } from '../core/targeting';
 import { ObjectPool } from '../core/pool';
-import { updatePath } from '../systems/path';
+import { GridCell, GridMap, createGridMap, gridToWorld } from '../systems/map';
+import { PlacementController } from '../systems/actions';
 import { addStatus, updateStatuses, Status } from '../core/status';
 import { upgradeCost, sellRefund } from '../core/economy';
-import { createMap } from '../systems/map';
 import { sound } from '../audio/SoundManager';
 import { getMode, cancelMode } from '../core/inputMode';
 import { TowerPanel } from '../ui/TowerPanel';
@@ -29,16 +29,18 @@ export class Enemy implements Targetable {
   circle: Phaser.GameObjects.Arc;
   hpBg: Phaser.GameObjects.Rectangle;
   hpBar: Phaser.GameObjects.Rectangle;
-  progress = 0;
   dead = false;
-  path!: Phaser.Curves.Path;
-  pathLength = 0;
   speed = 0;
   baseSpeed = 0;
   hp = 0;
   maxHp = 0;
   onDeath!: () => void;
+  progress = 0;
   private statuses: Status[] = [];
+  private path: GridCell[] = [];
+  private positions: { x: number; y: number }[] = [];
+  private segment = 0;
+  private segProgress = 0;
 
   constructor(private scene: Phaser.Scene) {
     this.circle = scene.add.circle(0, 0, 10, 0x222222).setActive(false).setVisible(false);
@@ -54,17 +56,22 @@ export class Enemy implements Targetable {
       .setVisible(false);
   }
 
-  spawn(path: Phaser.Curves.Path, speed: number, hp: number, onDeath: () => void) {
+  spawn(path: GridCell[], tileSize: number, speed: number, hp: number, onDeath: () => void) {
     this.path = path;
-    this.pathLength = path.getLength();
+    this.positions = path.map((c) => gridToWorld(c, { tileSize }));
+    this.segment = 0;
+    this.segProgress = 0;
     this.baseSpeed = speed;
     this.speed = speed;
     this.hp = hp;
     this.maxHp = hp;
     this.onDeath = onDeath;
-    this.progress = 0;
     this.dead = false;
-    this.circle.setActive(true).setVisible(true);
+    this.progress = 0;
+    this.circle
+      .setActive(true)
+      .setVisible(true)
+      .setPosition(this.positions[0].x, this.positions[0].y);
     this.hpBg.setActive(true).setVisible(true);
     this.hpBar.setActive(true).setVisible(true);
     this.statuses = [];
@@ -85,9 +92,11 @@ export class Enemy implements Targetable {
     this.hpBg.setActive(false).setVisible(false);
     this.hpBar.setActive(false).setVisible(false);
     this.dead = false;
-    this.progress = 0;
     this.statuses = [];
     this.speed = this.baseSpeed;
+    this.progress = 0;
+    this.segment = 0;
+    this.segProgress = 0;
   }
 
   get x() {
@@ -124,8 +133,39 @@ export class Enemy implements Targetable {
     this.speed = this.baseSpeed * (1 - slow);
     if (damage > 0) this.takeDamage(damage);
     this.circle.setFillStyle(slow > 0 ? 0x60a5fa : 0x222222);
-    this.hpBg.setPosition(this.circle.x, this.circle.y - 14);
-    this.hpBar.setPosition(this.circle.x - 10, this.circle.y - 14);
+    let remaining = this.speed * delta;
+    while (remaining > 0 && this.segment < this.positions.length - 1) {
+      const curr = this.positions[this.segment];
+      const next = this.positions[this.segment + 1];
+      const dx = next.x - curr.x;
+      const dy = next.y - curr.y;
+      const segLen = Math.sqrt(dx * dx + dy * dy);
+      const dist = segLen * (1 - this.segProgress);
+      if (remaining < dist) {
+        this.segProgress += remaining / segLen;
+        remaining = 0;
+      } else {
+        remaining -= dist;
+        this.segment += 1;
+        this.segProgress = 0;
+        if (this.segment >= this.positions.length - 1) {
+          this.dead = true;
+          this.circle.setActive(false).setVisible(false);
+          this.hpBg.setActive(false).setVisible(false);
+          this.hpBar.setActive(false).setVisible(false);
+          return true;
+        }
+      }
+    }
+    const curr = this.positions[this.segment];
+    const next = this.positions[Math.min(this.segment + 1, this.positions.length - 1)];
+    const x = curr.x + (next.x - curr.x) * this.segProgress;
+    const y = curr.y + (next.y - curr.y) * this.segProgress;
+    this.circle.setPosition(x, y);
+    this.hpBg.setPosition(x, y - 14);
+    this.hpBar.setPosition(x - 10, y - 14);
+    this.progress = (this.segment + this.segProgress) / (this.positions.length - 1);
+    return false;
   }
 }
 
@@ -207,7 +247,7 @@ export class Projectile {
 class Tower {
   public body: Phaser.GameObjects.Graphics;
   public rangeCircle: Phaser.GameObjects.Arc;
-  private lastShot = 0;
+  private cooldown = 0;
   public level = 1;
   public stats: TowerStats;
   constructor(
@@ -267,8 +307,8 @@ class Tower {
   }
 
   update(delta: number, enemies: Enemy[]) {
-    this.lastShot += delta;
-    if (this.lastShot < 1 / this.stats.fireRate) return;
+    this.cooldown -= delta;
+    if (this.cooldown > 0) return;
     const target = selectTarget(enemies, this.x, this.y, this.stats.range) as Enemy | undefined;
     if (target) {
       if (this.scene.game.loop.actualFps >= 50 || this.scene.projectiles.length < 100) {
@@ -276,7 +316,7 @@ class Tower {
         p.fire(target, this.x, this.y, this.stats, enemies, this.type);
         this.scene.projectiles.push(p);
       }
-      this.lastShot = 0;
+      this.cooldown = 1 / this.stats.fireRate;
     }
   }
 }
@@ -285,12 +325,11 @@ export class GameScene extends Phaser.Scene {
   private wave = 0;
   private lives = STARTING_LIVES;
   private money = STARTING_MONEY;
-  private path!: Phaser.Curves.Path;
+  private map!: GridMap;
+  private placement!: PlacementController;
   private enemies: Enemy[] = [];
   private towers: Tower[] = [];
   public projectiles: Projectile[] = [];
-  private occupied = new Set<string>();
-  private buildableMask = new Set<string>();
   private previewTower!: Phaser.GameObjects.Rectangle;
   private previewRange!: Phaser.GameObjects.Arc;
   private towerPanel!: TowerPanel;
@@ -337,12 +376,10 @@ export class GameScene extends Phaser.Scene {
     this.enemies = [];
     this.towers = [];
     this.projectiles = [];
-    this.occupied.clear();
     this.input.enabled = true;
     this.input.mouse?.disableContextMenu();
-    const map = createMap(this, { kind: 'forest' });
-    this.path = map.path;
-    this.buildableMask = map.buildableMask;
+    this.map = createGridMap(this, { cols: 20, rows: 12, tileSize: TILE_SIZE });
+    this.placement = new PlacementController(this.map);
     this.enemyPool = new ObjectPool(
       () => new Enemy(this),
       (e) => e.reset(),
@@ -403,8 +440,7 @@ export class GameScene extends Phaser.Scene {
         const type = mode.split(':')[1] as keyof typeof TOWERS;
         const cfg = TOWERS[type];
         this.previewRange.setRadius(cfg.levels[0].range);
-        const key = `${col},${row}`;
-        const valid = !this.isPath(col, row) && !this.occupied.has(key) && this.money >= cfg.cost;
+        const valid = this.placement.canPlace({ x: col, y: row }) && this.money >= cfg.cost;
         this.previewTower
           .setPosition(x, y)
           .setFillStyle(valid ? 0x60a5fa : 0xf87171, 0.5)
@@ -426,18 +462,17 @@ export class GameScene extends Phaser.Scene {
         }
         const mode = getMode();
         const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
-        const key = `${col},${row}`;
         if (mode.startsWith('build:')) {
           const type = mode.split(':')[1] as keyof typeof TOWERS;
           const cfg = TOWERS[type];
-          if (this.isPath(col, row) || this.occupied.has(key) || this.money < cfg.cost) {
+          if (!this.placement.canPlace({ x: col, y: row }) || this.money < cfg.cost) {
             sound.playError();
             return;
           }
           const x = col * TILE_SIZE + TILE_SIZE / 2;
           const y = row * TILE_SIZE + TILE_SIZE / 2;
           this.towers.push(new Tower(this, x, y, type));
-          this.occupied.add(key);
+          this.placement.place({ x: col, y: row });
           this.money -= cfg.cost;
           sound.playPlace();
           this.emitStats();
@@ -489,8 +524,8 @@ export class GameScene extends Phaser.Scene {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
-      enemy.update(dt);
-      if (updatePath(enemy, dt)) {
+      const reached = enemy.update(dt);
+      if (reached) {
         this.enemies.splice(i, 1);
         this.lives -= 1;
         this.emitStats();
@@ -563,7 +598,7 @@ export class GameScene extends Phaser.Scene {
     this.money += refund;
     const col = Math.floor(tower.x / TILE_SIZE);
     const row = Math.floor(tower.y / TILE_SIZE);
-    this.occupied.delete(`${col},${row}`);
+    this.placement.remove({ x: col, y: row });
     const idx = this.towers.indexOf(tower);
     if (idx >= 0) this.towers.splice(idx, 1);
     tower.body.destroy();
@@ -587,7 +622,7 @@ export class GameScene extends Phaser.Scene {
       const enemy = this.enemyPool.acquire();
       const speed = enemySpeedForWave(this.wave);
       const hp = enemyHpForWave(this.wave);
-      enemy.spawn(this.path, speed, hp, () => {
+      enemy.spawn(this.map.path, this.map.grid.tileSize, speed, hp, () => {
         this.money += ENEMY_REWARD;
         this.emitStats();
       });
@@ -614,9 +649,5 @@ export class GameScene extends Phaser.Scene {
       ticker.remove();
       if (!this.isGameOver) this.spawnWave();
     });
-  }
-
-  private isPath(col: number, row: number) {
-    return this.buildableMask.has(`${col},${row}`);
   }
 }

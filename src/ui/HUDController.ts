@@ -1,7 +1,5 @@
 import { events } from '../core/events';
 import { sound } from '../audio/SoundManager';
-import { setMode, InputMode } from '../core/inputMode';
-import { TOWERS } from '../core/balance';
 
 export class HUDController {
   private waveEl: HTMLElement;
@@ -74,31 +72,6 @@ export class HUDController {
       <button id="reset-save">Reset Save</button>
     `;
     root.appendChild(this.settingsPanel);
-
-    const toolbar = document.createElement('div');
-    toolbar.className = 'toolbar';
-    toolbar.innerHTML = `
-      <button data-mode="build:arrow">Arrow ($${TOWERS.arrow.cost})</button>
-      <button data-mode="build:cannon">Cannon ($${TOWERS.cannon.cost})</button>
-      <button data-mode="build:frost">Frost ($${TOWERS.frost.cost})</button>
-      <button data-mode="upgrade">Upgrade</button>
-      <button data-mode="sell">Sell</button>
-    `;
-    root.appendChild(toolbar);
-    const toolButtons = toolbar.querySelectorAll('button');
-    toolButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        sound.playUIClick();
-        const mode = btn.getAttribute('data-mode') as InputMode;
-        setMode(mode);
-      });
-    });
-    events.on('modeChanged', (m: string) => {
-      toolButtons.forEach((b) =>
-        b.toggleAttribute('aria-pressed', b.getAttribute('data-mode') === m),
-      );
-    });
-
     const volume = this.settingsPanel.querySelector('#sfx-volume') as HTMLInputElement;
     volume.addEventListener('input', () => sound.setVolume('sfx', Number(volume.value) / 100));
     const mute = this.settingsPanel.querySelector('#toggle-mute') as HTMLInputElement;
