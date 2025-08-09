@@ -1,8 +1,10 @@
+import { jitter } from './time';
 export const STARTING_LIVES = 20;
 export const STARTING_MONEY = 100;
 export const WAVE_INTERVAL = 10000; // ms
 export const ENEMIES_PER_WAVE = 5;
 export const ENEMY_REWARD = 5;
+export const WAVE_BREAK = 6000; // ms between waves
 
 // Responsive tile size (updated on resize)
 export let TILE_SIZE = 32;
@@ -12,20 +14,19 @@ export function computeTileSize(width: number, height: number) {
 }
 
 // Enemy balancing
-const SPEED_BASE = 40;
+const BASE_SPEED = 32;
+const SPEED_PER_WAVE = 0.03;
 export function enemySpeedForWave(wave: number) {
-  return Math.min(120, SPEED_BASE * (1 + wave * 0.05));
+  return Math.min(100, BASE_SPEED * (1 + wave * SPEED_PER_WAVE));
 }
 
-const HP_BASE = 25;
+const HP_BASE = 30;
 export function enemyHpForWave(wave: number) {
-  return Math.round(HP_BASE * (1 + wave * 0.12));
+  return Math.round(HP_BASE * (1 + wave * 0.14));
 }
 
 export function spawnDelay() {
-  const base = 750;
-  const jitter = base * 0.1;
-  return base + (Math.random() * 2 - 1) * jitter;
+  return jitter(900, 0.1);
 }
 
 export interface TowerStats {

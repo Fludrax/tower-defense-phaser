@@ -5,15 +5,14 @@ import {
   ENEMY_REWARD,
   STARTING_LIVES,
   STARTING_MONEY,
-  WAVE_INTERVAL,
   TOWERS,
   type TowerStats,
   PROJECTILE_SPEED,
-  computeTileSize,
   TILE_SIZE,
   enemySpeedForWave,
   enemyHpForWave,
   spawnDelay,
+  WAVE_BREAK,
 } from '../core/balance';
 import { worldToGrid } from '../core/grid';
 import { selectTarget, Targetable } from '../core/targeting';
@@ -21,9 +20,9 @@ import { ObjectPool } from '../core/pool';
 import { updatePath } from '../systems/path';
 import { addStatus, updateStatuses, Status } from '../core/status';
 import { upgradeCost, sellRefund } from '../core/economy';
-
-let GRID_WIDTH = 30;
-let GRID_HEIGHT = 17;
+import { createMap } from '../systems/map';
+import { sound } from '../audio/SoundManager';
+import { getMode, cancelMode } from '../core/inputMode';
 
 export class Enemy implements Targetable {
   circle: Phaser.GameObjects.Arc;
@@ -125,6 +124,7 @@ export class Projectile {
     this.enemies = enemies;
     this.dead = false;
     this.circle.setPosition(x, y).setActive(true).setVisible(true);
+    sound.playShoot();
   }
 
   reset() {
@@ -158,10 +158,12 @@ export class Projectile {
           .circle(tx, ty, this.stats.aoeRadius, 0xfacc15, 0.3)
           .setStrokeStyle(1, 0xffffff, 0.5);
         this.scene.time.addEvent({ delay: 100, callback: () => explosion.destroy() });
+        sound.playExplosion();
       } else {
         this.target.takeDamage(this.stats.damage);
         if (this.stats.slowPct) this.target.addSlow(this.stats.slowPct, this.stats.slowDur ?? 0);
         if (this.stats.dotDamage) this.target.addDot(this.stats.dotDamage, this.stats.dotDur ?? 0);
+        sound.playHit();
       }
       this.dead = true;
       this.circle.setActive(false).setVisible(false);
@@ -216,6 +218,7 @@ export class GameScene extends Phaser.Scene {
   private towers: Tower[] = [];
   public projectiles: Projectile[] = [];
   private occupied = new Set<string>();
+  private buildableMask = new Set<string>();
   private previewTower!: Phaser.GameObjects.Rectangle;
   private previewRange!: Phaser.GameObjects.Arc;
   private infoPanel!: Phaser.GameObjects.Container;
@@ -234,7 +237,6 @@ export class GameScene extends Phaser.Scene {
   private profiler = false;
   private updateTotal = 0;
   private updateSamples = 0;
-  private selectedTower = 'arrow';
 
   constructor() {
     super('Game');
@@ -268,11 +270,10 @@ export class GameScene extends Phaser.Scene {
     this.projectiles = [];
     this.occupied.clear();
     this.input.enabled = true;
-    computeTileSize(this.scale.width, this.scale.height);
-    GRID_WIDTH = Math.floor(this.scale.width / TILE_SIZE);
-    GRID_HEIGHT = Math.floor(this.scale.height / TILE_SIZE);
-    this.drawGrid();
-    this.createPath();
+    this.input.mouse?.disableContextMenu();
+    const map = createMap(this, { kind: 'forest' });
+    this.path = map.path;
+    this.buildableMask = map.buildableMask;
     this.enemyPool = new ObjectPool(
       () => new Enemy(this),
       (e) => e.reset(),
@@ -290,12 +291,6 @@ export class GameScene extends Phaser.Scene {
       this.profilerText.setVisible(this.profiler);
     });
 
-    this.waveTimer = this.time.addEvent({
-      delay: WAVE_INTERVAL,
-      loop: true,
-      callback: this.spawnWave,
-      callbackScope: this,
-    });
     this.spawnWave();
     this.emitStats();
     events.emit('speedChanged', this.speedMultiplier);
@@ -317,16 +312,10 @@ export class GameScene extends Phaser.Scene {
       this.scene.restart();
     });
 
-    this.scale.on('resize', (size: Phaser.Structs.Size) => {
-      computeTileSize(size.width, size.height);
-      GRID_WIDTH = Math.floor(size.width / TILE_SIZE);
-      GRID_HEIGHT = Math.floor(size.height / TILE_SIZE);
-    });
-
     this.time.timeScale = this.speedMultiplier;
 
     this.previewTower = this.add.rectangle(0, 0, TILE_SIZE, TILE_SIZE, 0x60a5fa, 0.5);
-    this.previewRange = this.add.circle(0, 0, TOWERS[this.selectedTower].levels[0].range);
+    this.previewRange = this.add.circle(0, 0, 0);
     this.previewRange.setStrokeStyle(1, 0xffffff, 0.3);
     this.previewRange.setFillStyle(0xffffff, 0.05);
     this.previewTower.setVisible(false);
@@ -353,44 +342,79 @@ export class GameScene extends Phaser.Scene {
     });
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (this.isGameOver) return;
+      const mode = getMode();
       const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
       const x = col * TILE_SIZE + TILE_SIZE / 2;
       const y = row * TILE_SIZE + TILE_SIZE / 2;
-      this.previewTower.setPosition(x, y);
-      this.previewRange.setPosition(x, y);
-      const key = `${col},${row}`;
-      const cfg = TOWERS[this.selectedTower];
-      this.previewRange.setRadius(cfg.levels[0].range);
-      const valid = !this.isPath(col, row) && !this.occupied.has(key) && this.money >= cfg.cost;
-      this.previewTower.setFillStyle(valid ? 0x60a5fa : 0xf87171, 0.5);
-      this.previewTower.setVisible(true);
-      this.previewRange.setVisible(true);
+      if (mode.startsWith('build:')) {
+        const type = mode.split(':')[1] as keyof typeof TOWERS;
+        const cfg = TOWERS[type];
+        this.previewRange.setRadius(cfg.levels[0].range);
+        const key = `${col},${row}`;
+        const valid = !this.isPath(col, row) && !this.occupied.has(key) && this.money >= cfg.cost;
+        this.previewTower
+          .setPosition(x, y)
+          .setFillStyle(valid ? 0x60a5fa : 0xf87171, 0.5)
+          .setVisible(true);
+        this.previewRange.setPosition(x, y).setVisible(true);
+      } else {
+        this.previewTower.setVisible(false);
+        this.previewRange.setVisible(false);
+      }
     });
 
     this.input.on(
       'pointerdown',
       (pointer: Phaser.Input.Pointer, targets: Phaser.GameObjects.GameObject[]) => {
         if (this.isGameOver) return;
-        if (this.infoPanel.visible && targets.length === 0) {
-          this.hidePanel();
+        if (pointer.rightButtonDown()) {
+          cancelMode();
+          return;
         }
+        const mode = getMode();
         const { col, row } = worldToGrid(pointer.x, pointer.y, TILE_SIZE);
         const key = `${col},${row}`;
-        const cfg = TOWERS[this.selectedTower];
-        if (this.isPath(col, row) || this.occupied.has(key) || this.money < cfg.cost) return;
-        const x = col * TILE_SIZE + TILE_SIZE / 2;
-        const y = row * TILE_SIZE + TILE_SIZE / 2;
-        this.towers.push(new Tower(this, x, y, this.selectedTower));
-        this.occupied.add(key);
-        this.money -= cfg.cost;
-        this.emitStats();
+        if (mode.startsWith('build:')) {
+          const type = mode.split(':')[1] as keyof typeof TOWERS;
+          const cfg = TOWERS[type];
+          if (this.isPath(col, row) || this.occupied.has(key) || this.money < cfg.cost) {
+            sound.playError();
+            return;
+          }
+          const x = col * TILE_SIZE + TILE_SIZE / 2;
+          const y = row * TILE_SIZE + TILE_SIZE / 2;
+          this.towers.push(new Tower(this, x, y, type));
+          this.occupied.add(key);
+          this.money -= cfg.cost;
+          sound.playPlace();
+          this.emitStats();
+          cancelMode();
+          this.previewTower.setVisible(false);
+          this.previewRange.setVisible(false);
+        } else if (mode === 'upgrade') {
+          const tower = this.getTower(col, row);
+          if (tower) {
+            this.upgradeTower(tower);
+          } else {
+            sound.playError();
+          }
+        } else if (mode === 'sell') {
+          const tower = this.getTower(col, row);
+          if (tower) {
+            this.sellTower(tower);
+          } else {
+            sound.playError();
+          }
+        } else {
+          if (this.infoPanel.visible && targets.length === 0) {
+            this.hidePanel();
+          } else {
+            const tower = this.getTower(col, row);
+            if (tower) this.showTowerPanel(tower);
+          }
+        }
       },
     );
-
-    events.on('tower-select', (type: string) => {
-      this.selectedTower = type;
-      this.previewRange.setRadius(TOWERS[type].levels[0].range);
-    });
 
     this.input.keyboard?.on('keydown-P', () => {
       this.paused = !this.paused;
@@ -402,6 +426,7 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-TWO', () => {
       this.time.timeScale = 2;
     });
+    this.input.keyboard?.on('keydown-ESC', () => cancelMode());
   }
 
   update(_time: number, delta: number) {
@@ -475,11 +500,15 @@ export class GameScene extends Phaser.Scene {
     const cfg = TOWERS[tower.type];
     if (tower.level >= cfg.levels.length) return;
     const cost = upgradeCost(cfg.cost, tower.level);
-    if (this.money < cost) return;
+    if (this.money < cost) {
+      sound.playError();
+      return;
+    }
     this.money -= cost;
     tower.level += 1;
     tower.stats = cfg.levels[tower.level - 1];
     this.emitStats();
+    sound.playPlace();
   }
 
   private sellTower(tower: Tower) {
@@ -493,32 +522,13 @@ export class GameScene extends Phaser.Scene {
     if (idx >= 0) this.towers.splice(idx, 1);
     tower.rect.destroy();
     this.emitStats();
+    sound.playPlace();
   }
 
-  private drawGrid() {
-    const graphics = this.add.graphics();
-    graphics.lineStyle(1, 0x334155, 0.5);
-    for (let x = 0; x <= GRID_WIDTH; x++) {
-      graphics.lineBetween(x * TILE_SIZE, 0, x * TILE_SIZE, GRID_HEIGHT * TILE_SIZE);
-    }
-    for (let y = 0; y <= GRID_HEIGHT; y++) {
-      graphics.lineBetween(0, y * TILE_SIZE, GRID_WIDTH * TILE_SIZE, y * TILE_SIZE);
-    }
-  }
-
-  private createPath() {
-    const points = [
-      new Phaser.Math.Vector2(0, 5 * TILE_SIZE),
-      new Phaser.Math.Vector2((GRID_WIDTH - 1) * TILE_SIZE, 5 * TILE_SIZE),
-      new Phaser.Math.Vector2((GRID_WIDTH - 1) * TILE_SIZE, (GRID_HEIGHT - 1) * TILE_SIZE),
-    ];
-    this.path = new Phaser.Curves.Path(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-      this.path.lineTo(points[i].x, points[i].y);
-    }
-    const graphics = this.add.graphics();
-    graphics.lineStyle(4, 0x22d3ee, 1);
-    this.path.draw(graphics);
+  private getTower(col: number, row: number) {
+    return this.towers.find(
+      (t) => Math.floor(t.x / TILE_SIZE) === col && Math.floor(t.y / TILE_SIZE) === row,
+    );
   }
 
   private spawnWave() {
@@ -541,12 +551,24 @@ export class GameScene extends Phaser.Scene {
     };
     spawnEnemy();
     this.emitStats();
+    // schedule next wave after break
+    let remaining = WAVE_BREAK / 1000;
+    events.emit('waveCountdown', remaining);
+    const ticker = this.time.addEvent({
+      delay: 1000,
+      repeat: remaining - 1,
+      callback: () => {
+        remaining -= 1;
+        events.emit('waveCountdown', remaining);
+      },
+    });
+    this.waveTimer = this.time.delayedCall(WAVE_BREAK, () => {
+      ticker.remove();
+      if (!this.isGameOver) this.spawnWave();
+    });
   }
 
   private isPath(col: number, row: number) {
-    return (
-      (row === 5 && col >= 0 && col <= GRID_WIDTH - 1) ||
-      (col === GRID_WIDTH - 1 && row >= 5 && row <= GRID_HEIGHT - 1)
-    );
+    return this.buildableMask.has(`${col},${row}`);
   }
 }

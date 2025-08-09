@@ -12,6 +12,16 @@ Tower Defense game built with Phaser 3 + TypeScript using Vite.
 - `npm run typecheck` – check TypeScript types
 - `npm test` – run unit tests
 
+## Gameplay
+
+Use the toolbar to choose actions:
+
+- **Build** Arrow, Cannon or Frost towers. After placement the cursor returns to normal.
+- **Upgrade** or **Sell** an existing tower.
+- Escape or right-click cancels the current mode.
+
+Enemy speed now starts slow and ramps up gradually each wave.
+
 ## Deployment
 
 Pushing to `main` builds and deploys the site to GitHub Pages automatically.
