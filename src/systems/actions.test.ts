@@ -27,7 +27,7 @@ const sceneStub = {
 
 describe('placement controller', () => {
   it('releases cell on remove', () => {
-    const map = createGridMap(sceneStub, { cols: 6, rows: 6, tileSize: 32 });
+    const map = createGridMap(sceneStub, { cols: 20, rows: 12, tileSize: 32 });
     const pc = new PlacementController(map);
     const cell = { x: 1, y: 1 };
     expect(pc.place(cell)).toBe(true);
@@ -36,7 +36,7 @@ describe('placement controller', () => {
   });
 
   it('rejects placement on occupied cell', () => {
-    const map = createGridMap(sceneStub, { cols: 6, rows: 6, tileSize: 32 });
+    const map = createGridMap(sceneStub, { cols: 20, rows: 12, tileSize: 32 });
     const pc = new PlacementController(map);
     const cell = { x: 1, y: 1 };
     expect(pc.place(cell)).toBe(true);

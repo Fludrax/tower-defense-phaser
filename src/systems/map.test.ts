@@ -4,7 +4,7 @@ vi.mock('phaser', () => ({
   default: { Display: { Color: { HexStringToColor: () => ({ color: 0 }) } } },
 }));
 
-import { createGridMap, isBuildable, GridCell } from './map';
+import { createGridMap, isBuildable, GridCell, PATH_CELLS, validPath } from './map';
 
 const sceneStub = {
   add: {
@@ -32,5 +32,9 @@ describe('grid map buildable mask', () => {
     const inside: GridCell = { x: 6, y: 6 };
     expect(isBuildable(start, map)).toBe(false);
     expect(isBuildable(inside, map)).toBe(true);
+  });
+
+  it('has a contiguous path', () => {
+    expect(validPath(PATH_CELLS)).toBe(true);
   });
 });
