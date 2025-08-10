@@ -1,4 +1,4 @@
-import { playTone } from './synth';
+import { playTone, playNoise } from './synth';
 
 export class SoundManager {
   private ctx: AudioContext | null =
@@ -23,34 +23,43 @@ export class SoundManager {
   getVolume() {
     return { master: this.master, sfx: this.sfx };
   }
-  private play(freq: number, dur: number, type: OscillatorType = 'sine') {
+  private play(freq: number, dur: number, type: OscillatorType = 'sine', vol = 0.3) {
     if (this.muted || !this.ctx) return;
-    playTone(this.ctx, freq, dur, type, this.master * this.sfx);
+    playTone(this.ctx, freq, dur, type, this.master * this.sfx * vol);
+  }
+  private noise(dur: number, vol = 0.3) {
+    if (this.muted || !this.ctx) return;
+    playNoise(this.ctx, dur, this.master * this.sfx * vol);
   }
   playShootArrow() {
-    this.play(880, 80, 'square');
+    // high pitched plink
+    this.play(1200, 60, 'square');
   }
   playShootCannon() {
-    this.play(200, 80, 'sine');
-    this.play(80, 120, 'sawtooth');
+    // short thud then booming low note
+    this.play(160, 80, 'sine');
+    this.play(80, 260, 'sawtooth');
   }
   playShootFrost() {
-    this.play(660, 100, 'triangle');
+    // crystalline tink with a subtle whoosh
+    this.play(1000, 80, 'triangle');
+    this.noise(200, 0.15);
   }
   playHit() {
-    this.play(220, 80, 'square');
+    this.play(300, 80, 'square');
   }
   playExplosion() {
-    this.play(120, 200, 'sawtooth');
+    this.noise(300, 0.4);
+    this.play(100, 300, 'sawtooth', 0.4);
   }
   playPlace() {
-    this.play(500, 50, 'square');
+    this.play(600, 50, 'square');
   }
   playError() {
-    this.play(100, 150, 'sawtooth');
+    this.play(90, 200, 'sawtooth');
   }
   playConfirm() {
-    this.play(660, 80, 'triangle');
+    this.play(700, 100, 'triangle');
   }
   playCash() {
     this.play(440, 120, 'square');
