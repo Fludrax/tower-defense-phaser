@@ -15,6 +15,41 @@ export interface GridMap {
   goal: GridCell;
 }
 
+export function addLine(path: GridCell[], from: GridCell, to: GridCell) {
+  if (from.x !== to.x && from.y !== to.y)
+    throw new Error('Diagonal segments are not supported');
+  const dx = Math.sign(to.x - from.x);
+  const dy = Math.sign(to.y - from.y);
+  if (path.length === 0) path.push({ ...from });
+  let { x, y } = from;
+  while (x !== to.x || y !== to.y) {
+    x += dx;
+    y += dy;
+    path.push({ x, y });
+  }
+}
+
+export const PATH_CELLS: GridCell[] = [];
+addLine(PATH_CELLS, { x: 0, y: 5 }, { x: 14, y: 5 });
+addLine(PATH_CELLS, { x: 14, y: 5 }, { x: 14, y: 8 });
+addLine(PATH_CELLS, { x: 14, y: 8 }, { x: 2, y: 8 });
+addLine(PATH_CELLS, { x: 2, y: 8 }, { x: 2, y: 1 });
+addLine(PATH_CELLS, { x: 2, y: 1 }, { x: 16, y: 1 });
+addLine(PATH_CELLS, { x: 16, y: 1 }, { x: 16, y: 3 });
+addLine(PATH_CELLS, { x: 16, y: 3 }, { x: 4, y: 3 });
+addLine(PATH_CELLS, { x: 4, y: 3 }, { x: 4, y: 10 });
+addLine(PATH_CELLS, { x: 4, y: 10 }, { x: 19, y: 10 });
+
+export function validPath(cells: GridCell[]) {
+  if (cells.length < 2) return false;
+  for (let i = 1; i < cells.length; i++) {
+    const dx = Math.abs(cells[i].x - cells[i - 1].x);
+    const dy = Math.abs(cells[i].y - cells[i - 1].y);
+    if (dx + dy !== 1) return false;
+  }
+  return true;
+}
+
 function drawGrid(
   scene: Phaser.Scene,
   cols: number,
@@ -57,23 +92,6 @@ function drawPath(
   }
 }
 
-function expandSegments(segments: [number, number, number, number][]): GridCell[] {
-  const cells: GridCell[] = [];
-  for (const [x1, y1, x2, y2] of segments) {
-    const dx = Math.sign(x2 - x1);
-    const dy = Math.sign(y2 - y1);
-    let x = x1;
-    let y = y1;
-    cells.push({ x, y });
-    while (x !== x2 || y !== y2) {
-      if (x !== x2) x += dx;
-      if (y !== y2) y += dy;
-      cells.push({ x, y });
-    }
-  }
-  return cells;
-}
-
 export function createGridMap(
   scene: Phaser.Scene,
   opts: { cols: number; rows: number; tileSize: number },
@@ -84,18 +102,7 @@ export function createGridMap(
   const offsetX = Math.floor((viewW - cols * tileSize) / 2);
   const offsetY = Math.floor((viewH - rows * tileSize) / 2);
   drawGrid(scene, cols, rows, tileSize, offsetX, offsetY);
-  const segments: [number, number, number, number][] = [
-    [0, 5, cols - 6, 5],
-    [cols - 6, 5, cols - 6, rows - 4],
-    [cols - 6, rows - 4, 2, rows - 4],
-    [2, rows - 4, 2, 1],
-    [2, 1, cols - 4, 1],
-    [cols - 4, 1, cols - 4, 3],
-    [cols - 4, 3, 4, 3],
-    [4, 3, 4, rows - 2],
-    [4, rows - 2, cols - 1, rows - 2],
-  ];
-  const path = expandSegments(segments);
+  const path = PATH_CELLS;
   drawPath(scene, path, tileSize, offsetX, offsetY);
   const buildableMask: boolean[][] = Array.from({ length: rows }, () => Array(cols).fill(true));
   // borders
